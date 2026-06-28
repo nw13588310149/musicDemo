@@ -16,6 +16,7 @@ import '../data/course_sign_data.dart';
 import '../data/course_teacher_index_data.dart';
 import '../data/head_teacher_index_data.dart';
 import '../data/schedule_course_card_builder.dart';
+import '../data/smart_campus_count_badge.dart';
 import '../data/smart_campus_dashboard_data.dart';
 import '../data/student_dormitory_data.dart';
 import '../data/student_repository.dart';
@@ -1026,8 +1027,8 @@ class _TeacherActionPanel extends StatelessWidget {
   }
 
   String? _badgeLabelFor(SmartCampusQuickActionData item) {
-    if (item.badge <= 0 || item.label == '群聊') return null;
-    return item.badge > 99 ? '99+' : '${item.badge}+';
+    if (item.label == '群聊') return null;
+    return smartCampusCountBadgeLabel(item.badge);
   }
 
   @override

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'admin_notice_data.dart';
+import 'smart_campus_count_badge.dart';
 
 class AdminHomeSummary {
   const AdminHomeSummary({
@@ -306,5 +307,31 @@ int _readInt(dynamic raw) {
   if (raw is int) return raw;
   if (raw is num) return raw.toInt();
   return int.tryParse(raw?.toString() ?? '') ?? 0;
+}
+
+/// 分页接口 `total` / `totalCount` 等字段（小课申请待审核角标等）。
+int? parseAdminPageTotal(dynamic raw) {
+  var data = raw;
+  if (data is Map && data['data'] is Map) {
+    data = data['data'];
+  }
+  if (data is! Map) return null;
+  final m = Map<String, dynamic>.from(data);
+  for (final key in ['total', 'totalCount', 'recordsTotal', 'count']) {
+    final v = m[key];
+    if (v == null) continue;
+    if (v is int) return v;
+    final n = int.tryParse(v.toString());
+    if (n != null) return n;
+  }
+  return null;
+}
+
+Map<String, String?> buildAdminQuickActionBadges({
+  required int pendingSmallCourseApplyCount,
+}) {
+  return {
+    '排课与课表': smartCampusCountBadgeLabel(pendingSmallCourseApplyCount),
+  };
 }
 

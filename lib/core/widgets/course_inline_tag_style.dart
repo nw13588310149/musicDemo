@@ -36,13 +36,15 @@ abstract final class CourseInlineTagStyle {
     return Container(
       height: ui(height),
       padding: EdgeInsets.symmetric(horizontal: ui(horizontalPadding)),
-      alignment: Alignment.center,
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(ui(borderRadius)),
         border: outlined ? Border.all(color: borderColor) : null,
       ),
-      child: child,
+      // `Container.alignment` 在父级给出有限最大宽度时会主动撑满，导致短科目
+      // 也占据整段剩余空间。用带 widthFactor 的 Align 只按文字内容取宽，
+      // 同时仍允许外层在极窄布局下给出 maxWidth 并触发文字省略。
+      child: Align(widthFactor: 1, heightFactor: 1, child: child),
     );
   }
 }

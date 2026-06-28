@@ -997,8 +997,8 @@ class _CornerLabel extends StatelessWidget {
         : _kOrangeBg;
     final fg = kind == TeacherExamCornerKind.published ? _kTextHint : _kOrange;
     return Container(
-      width: ui(68),
       height: ui(22),
+      padding: EdgeInsets.symmetric(horizontal: ui(10)),
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: bg,
@@ -1068,7 +1068,7 @@ class _ExamDetailPanel extends StatelessWidget {
                       ),
                       SizedBox(width: ui(12)),
                       _BannerActionButton(
-                        icon: Icons.event_seat_outlined,
+                        assetIcon: AppAssets.teacherExamSeatPlanIcon,
                         label: '考场安排',
                         onTap: onOpenSeatPlan,
                       ),

@@ -153,9 +153,8 @@ class _CircleImmersiveViewState extends State<CircleImmersiveView> {
     final commentsLoading = state.commentsLoadingPostId != null &&
         state.commentsLoadingPostId == _activePostId();
 
-    return Container(
+    return ColoredBox(
       color: const Color(0xFF0B081A),
-      clipBehavior: Clip.hardEdge,
       child: Stack(
         clipBehavior: Clip.hardEdge,
         children: [

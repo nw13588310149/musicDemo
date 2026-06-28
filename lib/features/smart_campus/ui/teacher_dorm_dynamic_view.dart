@@ -40,6 +40,8 @@ import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/app_text_field.dart';
 import '../../shell/ui/shell_layout.dart';
 import 'widgets/smart_campus_stat_card.dart';
+import '../data/smart_campus_count_badge.dart';
+import '../data/student_dormitory_data.dart' show DormitoryDetailField;
 import '../data/teacher_dormitory_data.dart';
 import '../state/smart_campus_controller.dart';
 import '../state/smart_campus_state.dart';
@@ -233,14 +235,22 @@ class _TeacherDormDynamicViewState
 
   Future<void> _showMakeupDetail(_PunchAuditRecord record) async {
     if (record.id.isEmpty) return;
-    final fields = await ref
+    final rawFields = await ref
         .read(teacherDormitoryControllerProvider.notifier)
         .loadMakeupDetail(record.id);
     if (!mounted) return;
-    if (fields.isEmpty) {
+    if (rawFields.isEmpty) {
       AppToast.show(context, '未获取到补卡详情');
       return;
     }
+    const studentNameLabels = {'姓名', '学生', '学生姓名'};
+    final fields = rawFields
+        .map(
+          (field) => studentNameLabels.contains(field.label)
+              ? DormitoryDetailField('学生姓名', record.studentName)
+              : field,
+        )
+        .toList(growable: false);
     await showDormitoryDetailDialog(
       context,
       title: '${record.studentName} · 补卡详情',
@@ -793,7 +803,7 @@ class _TabPill extends StatelessWidget {
             if (tab == _TopTab.punchAudit && pendingPunchCount > 0) ...[
               SizedBox(width: ui(4)),
               _RedBadge(
-                text: pendingPunchCount > 9 ? '10+' : '$pendingPunchCount',
+                text: smartCampusCountBadgeLabel(pendingPunchCount)!,
               ),
             ],
           ],

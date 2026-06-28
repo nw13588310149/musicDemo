@@ -78,9 +78,7 @@ class CircleListView extends StatelessWidget {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final gap = ui(16);
-            final horizontalPadding = gap;
-            final available =
-                constraints.maxWidth - horizontalPadding * 2;
+            final available = constraints.maxWidth;
             final columns = _columnCount(available, ui);
             final colWidth =
                 (available - gap * (columns - 1)) / columns;
@@ -108,12 +106,7 @@ class CircleListView extends StatelessWidget {
               physics: const AlwaysScrollableScrollPhysics(
                 parent: ClampingScrollPhysics(),
               ),
-              padding: EdgeInsets.fromLTRB(
-                horizontalPadding,
-                0,
-                horizontalPadding,
-                gap,
-              ),
+              padding: EdgeInsets.only(bottom: gap),
               child: SizedBox(
                 width: available,
                 child: Row(

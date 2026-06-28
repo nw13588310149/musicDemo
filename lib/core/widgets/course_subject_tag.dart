@@ -59,7 +59,9 @@ class CourseSubjectTag extends StatelessWidget {
     return CourseInlineTagStyle.build(
       ui: ui,
       backgroundColor: bg,
-      outlined: false,
+      // 与后方大课/小课标签使用完全相同的 1px 描边盒模型，避免实色背景
+      // 在视觉上比带描边标签上下各多出 1px。
+      outlined: true,
       child: Text(
         name,
         maxLines: 1,

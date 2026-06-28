@@ -16,7 +16,7 @@ class SmartCampusQuickActionIcon extends StatelessWidget {
 
   final String assetPath;
 
-  /// 右上角红色角标文案（如 `10+`）；为空时不展示。
+  /// 右上角红色角标文案（10 以内数字，大于 10 为 9+）；为空时不展示。
   final String? badgeLabel;
 
   /// 图标展示边长（逻辑像素，经 [DashboardScaleScope] 缩放）。

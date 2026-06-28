@@ -62,6 +62,7 @@ class DashboardCourseNoticeCard extends StatelessWidget {
     required this.subtitle,
     required this.avatar,
     required this.runState,
+    this.isSelected = false,
     this.tagDotColor,
     this.onTap,
   });
@@ -74,6 +75,7 @@ class DashboardCourseNoticeCard extends StatelessWidget {
   final String subtitle;
   final Widget avatar;
   final DashboardCourseRunState runState;
+  final bool isSelected;
   final Color? tagDotColor;
   final VoidCallback? onTap;
 
@@ -84,6 +86,8 @@ class DashboardCourseNoticeCard extends StatelessWidget {
   static const Color _kTextSection = Color(0xFF1A1A1A);
   static const Color _kTextHint = Color(0xFFB6B5BB);
   static const Color _kTimeDash = Color(0xFFB6B5BB);
+  static const double _kStatusBadgeWidth = 60;
+  static const double _kHeaderStatusGap = 4;
 
   static Color? dotColorFromHex(String? hex, {required bool ended}) {
     if (ended) return null;
@@ -127,38 +131,40 @@ class DashboardCourseNoticeCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: _kCardBg,
         borderRadius: BorderRadius.circular(ui(12)),
+        boxShadow: isSelected
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  blurRadius: ui(6),
+                  offset: Offset(0, ui(2)),
+                ),
+              ]
+            : null,
       ),
       child: Stack(
         children: [
           Positioned(
             left: ui(16),
             top: ui(14),
-            right: ui(76),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                _TimeLabel(
-                  startTime: startTime,
-                  endTime: endTime,
-                  textColor: timeTextColor,
-                  ui: ui,
-                ),
-                SizedBox(width: ui(6)),
-                CourseSubjectTag(name: subjectName, muted: muted),
-                SizedBox(width: ui(4)),
-                CourseClassKindTag(
-                  isSmall: isSmallCourse,
-                  muted: muted,
-                  dotColor: resolvedDotColor,
-                ),
-              ],
+            // 只保留状态角标自身宽度 + 4px 安全间距，尽量扩大右侧标签
+            // 横向滑动区，同时确保内容不会进入角标覆盖范围。
+            right: ui(_kStatusBadgeWidth + _kHeaderStatusGap),
+            child: _ResponsiveCourseHeader(
+              startTime: startTime,
+              endTime: endTime,
+              subjectName: subjectName,
+              isSmallCourse: isSmallCourse,
+              textColor: timeTextColor,
+              muted: muted,
+              tagDotColor: resolvedDotColor,
+              ui: ui,
             ),
           ),
           Positioned(
             right: 0,
             top: 0,
             child: Container(
-              width: ui(60),
+              width: ui(_kStatusBadgeWidth),
               height: ui(22),
               alignment: Alignment.center,
               decoration: BoxDecoration(
@@ -180,11 +186,7 @@ class DashboardCourseNoticeCard extends StatelessWidget {
               ),
             ),
           ),
-          Positioned(
-            left: ui(16),
-            top: ui(48),
-            child: avatar,
-          ),
+          Positioned(left: ui(16), top: ui(48), child: avatar),
           Positioned(
             left: ui(64),
             top: ui(50),
@@ -232,6 +234,74 @@ class DashboardCourseNoticeCard extends StatelessWidget {
   }
 }
 
+/// 首页、任课老师端和学生端共用课程卡首行。
+///
+/// 时间始终完整显示；科目与大/小课标签视为一个不可拆分的自然宽度整体，
+/// 剩余空间不足时只在标签区域内横向滑动，不压缩或截断任一标签。
+class _ResponsiveCourseHeader extends StatelessWidget {
+  const _ResponsiveCourseHeader({
+    required this.startTime,
+    required this.endTime,
+    required this.subjectName,
+    required this.isSmallCourse,
+    required this.textColor,
+    required this.muted,
+    required this.tagDotColor,
+    required this.ui,
+  });
+
+  final String startTime;
+  final String endTime;
+  final String subjectName;
+  final bool isSmallCourse;
+  final Color textColor;
+  final bool muted;
+  final Color? tagDotColor;
+  final double Function(double) ui;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _TimeLabel(
+          startTime: startTime,
+          endTime: endTime,
+          textColor: textColor,
+          ui: ui,
+        ),
+        SizedBox(width: ui(6)),
+        Expanded(
+          child: ClipRect(
+            child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(
+                context,
+              ).copyWith(scrollbars: false),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const ClampingScrollPhysics(),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    CourseSubjectTag(name: subjectName, muted: muted),
+                    SizedBox(width: ui(4)),
+                    CourseClassKindTag(
+                      isSmall: isSmallCourse,
+                      muted: muted,
+                      dotColor: tagDotColor,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _TimeLabel extends StatelessWidget {
   const _TimeLabel({
     required this.startTime,
@@ -256,9 +326,11 @@ class _TimeLabel extends StatelessWidget {
       height: 1,
     );
     if (!hasEnd) {
-      return Text(startTime, style: baseStyle);
+      return Text(startTime, maxLines: 1, softWrap: false, style: baseStyle);
     }
     return RichText(
+      maxLines: 1,
+      softWrap: false,
       text: TextSpan(
         style: baseStyle,
         children: [

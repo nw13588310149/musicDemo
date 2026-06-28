@@ -42,6 +42,7 @@ import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import 'widgets/smart_campus_stat_card.dart';
 import '../data/home_school_chat_data.dart';
+import '../data/smart_campus_count_badge.dart';
 import '../data/teacher_repository.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -885,7 +886,7 @@ class _AvatarWithBadge extends StatelessWidget {
                   borderRadius: BorderRadius.circular(ui(20)),
                 ),
                 child: Text(
-                  unreadCount > 9 ? '10+' : '$unreadCount',
+                  smartCampusCountBadgeLabel(unreadCount)!,
                   style: TextStyle(
                     fontSize: ui(10),
                     color: Colors.white,
@@ -907,22 +908,26 @@ class _HomeSchoolAvatar extends StatelessWidget {
     required this.size,
     required this.headUrl,
     required this.fallbackInitial,
-    required this.borderRadius,
+    this.borderRadius,
+    this.circular = false,
   });
 
   final double size;
   final String? headUrl;
   final String fallbackInitial;
-  final double borderRadius;
+  final double? borderRadius;
+  final bool circular;
 
   @override
   Widget build(BuildContext context) {
+    final radius = circular ? size / 2 : (borderRadius ?? size / 2);
     final placeholder = Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         color: const Color(0xFFEFE5FF),
-        borderRadius: BorderRadius.circular(borderRadius),
+        shape: circular ? BoxShape.circle : BoxShape.rectangle,
+        borderRadius: circular ? null : BorderRadius.circular(radius),
       ),
       alignment: Alignment.center,
       child: Text(
@@ -938,8 +943,29 @@ class _HomeSchoolAvatar extends StatelessWidget {
     );
     final url = headUrl?.trim() ?? '';
     if (url.isEmpty) return placeholder;
+    if (circular) {
+      // 不再通过任何 Clip 组件裁切图片。让 BoxDecoration 直接按圆形区域
+      // 绘制 DecorationImage，圆周不会受父级裁剪边界或小数缩放影响。
+      return SizedBox.square(
+        dimension: size,
+        child: CachedNetworkImage(
+          imageUrl: url,
+          imageBuilder: (_, imageProvider) => DecoratedBox(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              image: DecorationImage(
+                image: imageProvider,
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          placeholder: (_, _) => placeholder,
+          errorWidget: (_, _, _) => placeholder,
+        ),
+      );
+    }
     return ClipRRect(
-      borderRadius: BorderRadius.circular(borderRadius),
+      borderRadius: BorderRadius.circular(radius),
       child: SizedBox(
         width: size,
         height: size,
@@ -1046,11 +1072,22 @@ class _ChatDetailDialogState extends ConsumerState<_ChatDetailDialog> {
     super.dispose();
   }
 
-  Future<void> _scrollToBottom() async {
+  void _scrollToBottom() {
     if (!_scrollController.hasClients) return;
-    await Future<void>.delayed(const Duration(milliseconds: 16));
-    if (!mounted || !_scrollController.hasClients) return;
     _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+  }
+
+  /// 消息列表在 `_loading == false` 后才会挂载 ScrollController，需等布局完成再滚到底。
+  void _scheduleScrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _scrollToBottom();
+      // 气泡富文本可能在首帧后才算出准确高度，再滚一次确保到底。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _scrollToBottom();
+      });
+    });
   }
 
   Future<void> _loadMessages() async {
@@ -1071,7 +1108,7 @@ class _ChatDetailDialogState extends ConsumerState<_ChatDetailDialog> {
       _messages = parsed.reversed.toList();
       _loading = false;
     });
-    await _scrollToBottom();
+    _scheduleScrollToBottom();
   }
 
   Future<void> _onSend() async {
@@ -1281,14 +1318,20 @@ class _DialogHeader extends StatelessWidget {
           ),
           SizedBox(height: ui(12)),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              _HomeSchoolAvatar(
-                size: ui(40),
-                headUrl: conversation.parentHeadUrl,
-                fallbackInitial: conversation.parentRelation.isNotEmpty
-                    ? conversation.parentRelation.characters.first
-                    : '家',
-                borderRadius: ui(8),
+              SizedBox.square(
+                dimension: ui(36),
+                child: Center(
+                  child: _HomeSchoolAvatar(
+                    size: ui(32),
+                    headUrl: conversation.parentHeadUrl,
+                    fallbackInitial: conversation.parentRelation.isNotEmpty
+                        ? conversation.parentRelation.characters.first
+                        : '家',
+                    circular: true,
+                  ),
+                ),
               ),
               SizedBox(width: ui(8)),
               Expanded(

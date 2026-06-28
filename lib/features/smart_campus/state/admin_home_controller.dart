@@ -43,11 +43,13 @@ class AdminHomeController extends StateNotifier<AdminHomeState> {
       ),
       _repository.noticeManageList(current: 1, size: 20, status: 1),
       _repository.workReminders(),
+      _repository.schoolSmallCourseApplyList(current: 1, size: 1, status: 0),
     ]);
     final summaryResponse = responses[0];
     final loginChartResponse = responses[1];
     final noticeResponse = responses[2];
     final workRemindersResponse = responses[3];
+    final smallCourseApplyResponse = responses[4];
     state = state.copyWith(
       loading: false,
       summary: summaryResponse.isSuccess
@@ -66,6 +68,9 @@ class AdminHomeController extends StateNotifier<AdminHomeState> {
       workReminders: workRemindersResponse.isSuccess
           ? parseAdminHomeWorkReminders(workRemindersResponse.data)
           : state.workReminders,
+      pendingSmallCourseApplyCount: smallCourseApplyResponse.isSuccess
+          ? (parseAdminPageTotal(smallCourseApplyResponse.data) ?? 0)
+          : state.pendingSmallCourseApplyCount,
       summaryError: summaryResponse.isSuccess ? '' : summaryResponse.displayMsg,
       loginChartError: loginChartResponse.isSuccess
           ? ''

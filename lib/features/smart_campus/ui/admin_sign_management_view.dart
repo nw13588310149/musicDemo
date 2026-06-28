@@ -48,6 +48,7 @@ import '../../../core/widgets/smooth_circle_network_avatar.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
 import '../data/course_sign_data.dart';
+import '../data/smart_campus_count_badge.dart';
 import 'widgets/course_sign_status_picker.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'widgets/smart_campus_stat_card.dart';
@@ -71,6 +72,12 @@ const Color _kOrange = Color(0xFFF59E0B);
 const Color _kOrangeBg = Color(0xFFFFF7E6);
 const Color _kRed = Color(0xFFFF323C);
 const Color _kRedBg = Color(0xFFFFEEEF);
+
+const double _kSignBadgeHeight = 22;
+const double _kSignBadgeHorizontalPadding = 8;
+const double _kSignBadgeBorderRadius = 6;
+const double _kSignBadgeFontSize = 11;
+const double _kSignBadgeGap = 6;
 
 // ─── 入口视图 ──────────────────────────────────────────────────────────────
 
@@ -357,7 +364,7 @@ class _MakeupBadgeButton extends StatelessWidget {
                   borderRadius: BorderRadius.circular(ui(8)),
                 ),
                 child: Text(
-                  count > 99 ? '99+' : '$count',
+                  smartCampusCountBadgeLabel(count)!,
                   style: TextStyle(
                     fontSize: ui(10),
                     color: Colors.white,
@@ -664,10 +671,12 @@ class _SignClassNameBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(8), vertical: ui(3)),
+      height: ui(_kSignBadgeHeight),
+      padding: EdgeInsets.symmetric(horizontal: ui(_kSignBadgeHorizontalPadding)),
+      alignment: Alignment.center,
       decoration: BoxDecoration(
         color: _kPageBg,
-        borderRadius: BorderRadius.circular(ui(6)),
+        borderRadius: BorderRadius.circular(ui(_kSignBadgeBorderRadius)),
         border: Border.all(color: _kBorderSoft),
       ),
       child: Text(
@@ -675,13 +684,39 @@ class _SignClassNameBadge extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          fontSize: ui(11),
+          fontSize: ui(_kSignBadgeFontSize),
           color: _kTextSecondary,
           fontFamily: 'PingFang SC',
           fontWeight: AppFont.w500,
           height: 1,
         ),
       ),
+    );
+  }
+}
+
+class _SignSessionHeaderBadges extends StatelessWidget {
+  const _SignSessionHeaderBadges({
+    required this.className,
+    required this.signStatus,
+  });
+
+  final String className;
+  final int signStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        if (className.isNotEmpty) ...[
+          _SignClassNameBadge(label: className),
+          SizedBox(width: ui(_kSignBadgeGap)),
+        ],
+        _SmallClassStatusBadge(signStatus: signStatus),
+      ],
     );
   }
 }
@@ -746,10 +781,6 @@ class _LargeClassSessionCard extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            if (session.className.isNotEmpty) ...[
-                              SizedBox(width: ui(8)),
-                              _SignClassNameBadge(label: session.className),
-                            ],
                           ],
                         ),
                         SizedBox(height: ui(6)),
@@ -770,7 +801,10 @@ class _LargeClassSessionCard extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      _SmallClassStatusBadge(signStatus: session.signStatus),
+                      _SignSessionHeaderBadges(
+                        className: session.className,
+                        signStatus: session.signStatus,
+                      ),
                       SizedBox(height: ui(8)),
                       Row(
                         mainAxisSize: MainAxisSize.min,
@@ -813,10 +847,11 @@ class _LargeClassSessionCard extends StatelessWidget {
                   SizedBox(height: ui(12)),
                   Row(
                     children: [
-                      Icon(
-                        Icons.group_rounded,
-                        size: ui(13),
-                        color: _kTextSecondary,
+                      Image.asset(
+                        AppAssets.adminSignManagementStudentIcon,
+                        width: ui(13),
+                        height: ui(13),
+                        fit: BoxFit.contain,
                       ),
                       SizedBox(width: ui(5)),
                       Text(
@@ -1498,7 +1533,7 @@ class _SmallClassFlowHint extends StatelessWidget {
               steps[i],
               style: TextStyle(
                 fontSize: ui(11),
-                color: _kPurple,
+                color: _kTextDark,
                 fontFamily: 'PingFang SC',
                 fontWeight: AppFont.w400,
                 height: 1,
@@ -1576,10 +1611,6 @@ class _SmallClassSessionCard extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                              if (session.className.isNotEmpty) ...[
-                                SizedBox(width: ui(8)),
-                                _SignClassNameBadge(label: session.className),
-                              ],
                             ],
                           ),
                           SizedBox(height: ui(6)),
@@ -1597,7 +1628,10 @@ class _SmallClassSessionCard extends StatelessWidget {
                       ),
                     ),
                     SizedBox(width: ui(10)),
-                    _SmallClassStatusBadge(signStatus: session.signStatus),
+                    _SignSessionHeaderBadges(
+                      className: session.className,
+                      signStatus: session.signStatus,
+                    ),
                   ],
                 ),
                 SizedBox(height: ui(12)),
@@ -1637,10 +1671,11 @@ class _SmallClassSessionCard extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          Icon(
-                            Icons.group_rounded,
-                            size: ui(13),
-                            color: _kTextSecondary,
+                          Image.asset(
+                            AppAssets.adminSignManagementStudentIcon,
+                            width: ui(13),
+                            height: ui(13),
+                            fit: BoxFit.contain,
                           ),
                           SizedBox(width: ui(5)),
                           Expanded(
@@ -2255,15 +2290,19 @@ class _SmallClassStatusBadge extends StatelessWidget {
       bg = _kPageBg;
     }
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(7), vertical: ui(3)),
+      height: ui(_kSignBadgeHeight),
+      padding: EdgeInsets.symmetric(horizontal: ui(_kSignBadgeHorizontalPadding)),
+      alignment: Alignment.center,
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(ui(5)),
+        borderRadius: BorderRadius.circular(ui(_kSignBadgeBorderRadius)),
       ),
       child: Text(
         label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          fontSize: ui(11),
+          fontSize: ui(_kSignBadgeFontSize),
           color: color,
           fontFamily: 'PingFang SC',
           fontWeight: AppFont.w500,

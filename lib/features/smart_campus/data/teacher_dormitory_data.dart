@@ -358,7 +358,7 @@ List<DormitoryDetailField> parseTeacherDormitoryMakeupDetailFields(dynamic raw) 
   final map = _unwrapMap(raw) ?? const <String, dynamic>{};
   final status = _pickInt(map, ['status']);
   return [
-    DormitoryDetailField('学生', _pickStudentName(map, '')),
+    DormitoryDetailField('学生姓名', _pickStudentName(map, '')),
     DormitoryDetailField('补卡场次', _pickString(map, ['checkType'], '补卡')),
     DormitoryDetailField('补卡日期', _pickString(map, ['checkDate'])),
     DormitoryDetailField('申请原因', _pickString(map, ['reason'], '未填写')),

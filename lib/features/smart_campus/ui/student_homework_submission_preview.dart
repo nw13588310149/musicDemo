@@ -535,12 +535,16 @@ class _HomeworkMediaKitPlayerState extends State<_HomeworkMediaKitPlayer> {
               left: 0,
               right: 0,
               bottom: 0,
-              child: _HomeworkProgressStrip(
-                ui: ui,
-                position: _position,
-                duration: _duration,
-                fmt: _fmt,
-                onSeek: (t) => unawaited(_player?.seek(t)),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(ui(20), 0, ui(20), ui(20)),
+                child: _HomeworkProgressStrip(
+                  ui: ui,
+                  position: _position,
+                  duration: _duration,
+                  fmt: _fmt,
+                  lightStyle: true,
+                  onSeek: (t) => unawaited(_player?.seek(t)),
+                ),
               ),
             ),
           ],

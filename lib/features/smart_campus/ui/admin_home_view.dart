@@ -171,6 +171,9 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
         SizedBox(height: ui(16)),
         _QuickActionsCard(
           selectedRole: widget.selectedRole,
+          actionBadges: buildAdminQuickActionBadges(
+            pendingSmallCourseApplyCount: homeState.pendingSmallCourseApplyCount,
+          ),
           onOpenGroupChat: widget.onOpenGroupChat,
           onOpenPrincipalMailbox: widget.onOpenPrincipalMailbox,
           onOpenSchoolCircle: widget.onOpenSchoolCircle,
@@ -481,6 +484,7 @@ class _SectionTitle extends StatelessWidget {
 class _QuickActionsCard extends StatelessWidget {
   const _QuickActionsCard({
     required this.selectedRole,
+    this.actionBadges = const {},
     this.onOpenGroupChat,
     this.onOpenPrincipalMailbox,
     this.onOpenSchoolCircle,
@@ -495,6 +499,7 @@ class _QuickActionsCard extends StatelessWidget {
   });
 
   final SmartCampusRole selectedRole;
+  final Map<String, String?> actionBadges;
   final VoidCallback? onOpenGroupChat;
   final VoidCallback? onOpenPrincipalMailbox;
   final VoidCallback? onOpenSchoolCircle;
@@ -544,7 +549,7 @@ class _QuickActionsCard extends StatelessWidget {
           SmartCampusQuickActionItem(
             label: action.label,
             assetPath: action.iconAsset,
-            badgeLabel: action.badge,
+            badgeLabel: actionBadges[action.label] ?? action.badge,
             onTap: _resolveTap(action.label),
           ),
       ],

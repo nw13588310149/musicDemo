@@ -676,6 +676,8 @@ abstract final class AppAssets {
       'assets/images/smartCampus/admin/sign_management/stat_card_4.png';
   static const adminSignManagementMakeupAuditIcon =
       'assets/images/smartCampus/admin/sign_management/icon_lishi.png';
+  static const adminSignManagementStudentIcon =
+      'assets/images/smartCampus/admin/sign_management/student_icon.png';
 
   /// 管理员 · 教师管理 · 顶部统计卡背景（从左到右）。
   static const adminTeacherManagementStatCard1 =
@@ -794,6 +796,10 @@ abstract final class AppAssets {
   /// 任课老师 · 考评管理 · banner 右上角「历史月考」图标。
   static const teacherExamHistoryIcon =
       'assets/images/smartCampus/teacher/exam/history_icon.png';
+
+  /// 任课老师 · 考评管理 · 卡片「考场安排」图标。
+  static const teacherExamSeatPlanIcon =
+      'assets/images/smartCampus/teacher/exam/seat_plan_icon.png';
 
   // 智慧校园群聊
   static const groupChatBg = 'assets/images/groupChat/bg.png';

@@ -54,6 +54,7 @@ import '../data/schedule_color_palette.dart';
 import '../data/schedule_course_card_builder.dart';
 import '../data/schedule_slot_time.dart';
 import '../data/schedule_teaching_week.dart';
+import '../data/smart_campus_count_badge.dart';
 import 'widgets/schedule_course_card.dart';
 import 'widgets/schedule_idle_slot.dart';
 import 'widgets/smart_campus_page_banner.dart';
@@ -1555,11 +1556,8 @@ class _AdminTabSegment extends StatelessWidget {
   final ValueChanged<_AdminScheduleTab> onChanged;
   final int applyPendingCount;
 
-  String? get _applyBadgeText {
-    if (applyPendingCount <= 0) return null;
-    if (applyPendingCount >= 10) return '10+';
-    return '$applyPendingCount';
-  }
+  String? get _applyBadgeText =>
+      smartCampusCountBadgeLabel(applyPendingCount);
 
   @override
   Widget build(BuildContext context) {
