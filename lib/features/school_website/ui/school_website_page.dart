@@ -4,35 +4,35 @@ import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dar
 
 import '../../shell/ui/shell_layout.dart';
 import '../state/school_website_controller.dart';
-import '../state/school_website_state.dart';
 import 'widgets/school_website_html_view.dart';
 
-/// 校园官网：在 Shell 主内容区内铺满渲染后端返回的完整 HTML。
+/// 校园官网（微校）：在 Shell 主内容区内 100% 铺满渲染后端 HTML。
 class SchoolWebsitePage extends ConsumerWidget {
   const SchoolWebsitePage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(schoolWebsiteControllerProvider);
     final ui = DashboardScaleScope.of(context).ui;
 
-    return ShellPageSurface(
-      padding: EdgeInsets.zero,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(ui(ShellLayoutSpec.panelRadius)),
-        child: _Body(state: state),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(ui(ShellLayoutSpec.panelRadius)),
+      clipBehavior: Clip.hardEdge,
+      child: const ColoredBox(
+        color: Colors.white,
+        child: _SchoolWebsiteBody(),
       ),
     );
   }
 }
 
-class _Body extends StatelessWidget {
-  const _Body({required this.state});
-
-  final SchoolWebsiteState state;
+/// 单独 Consumer 子树，避免整页因 html 加载状态反复重建 Shell 外层。
+class _SchoolWebsiteBody extends ConsumerWidget {
+  const _SchoolWebsiteBody();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(schoolWebsiteControllerProvider);
+
     if (state.loading) {
       return const Center(child: AppLoadingIndicator());
     }
@@ -48,6 +48,7 @@ class _Body extends StatelessWidget {
         ),
       );
     }
+
     return SchoolWebsiteHtmlView(html: state.htmlContent);
   }
 }

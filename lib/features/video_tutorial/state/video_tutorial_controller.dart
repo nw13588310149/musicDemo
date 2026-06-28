@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/app_providers.dart';
 import '../../../core/storage/app_storage.dart';
+import '../../shell/state/shell_controller.dart';
 import '../data/video_tutorial_repository.dart';
 import 'video_tutorial_state.dart';
 
@@ -14,6 +15,7 @@ final videoTutorialControllerProvider = StateNotifierProvider.autoDispose
         final repository = ref.watch(videoTutorialRepositoryProvider);
         final storage = ref.watch(appStorageProvider);
         return VideoTutorialController(
+          ref: ref,
           repository: repository,
           storage: storage,
           args: args,
@@ -23,19 +25,24 @@ final videoTutorialControllerProvider = StateNotifierProvider.autoDispose
 
 class VideoTutorialController extends StateNotifier<VideoTutorialState> {
   VideoTutorialController({
+    required Ref ref,
     required VideoTutorialRepository repository,
     required AppStorage storage,
     required VideoTutorialPageArgs args,
-  }) : _repository = repository,
+  }) : _ref = ref,
+       _repository = repository,
        _storage = storage,
        _args = args,
        super(VideoTutorialState(checkStatusEnabled: storage.showMemberContent)) {
+    _myInfoReady ??= Completer<void>();
     unawaited(refresh());
   }
 
+  final Ref _ref;
   final VideoTutorialRepository _repository;
   final AppStorage _storage;
   final VideoTutorialPageArgs _args;
+  Completer<void>? _myInfoReady;
   final Map<String, _VideoListCacheEntry> _listCache =
       <String, _VideoListCacheEntry>{};
   final Set<String> _inFlightPageKeys = <String>{};
@@ -56,46 +63,54 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
   Future<void> refresh() async {
     _listCache.clear();
     _inFlightPageKeys.clear();
+    _myInfoReady ??= Completer<void>();
     state = state.copyWith(
       loading: true,
       errorMessage: '',
       checkStatusEnabled: _storage.showMemberContent,
     );
 
-    final responses = await Future.wait<dynamic>([
-      _args.schoolMode
-          ? _repository.getSchoolBannerList(schoolId: _args.schoolId)
-          : _repository.getBannerList(),
-      _repository.getMenuList(),
-      _repository.getMyInfo(),
-    ]);
+    try {
+      final responses = await Future.wait<dynamic>([
+        _args.schoolMode
+            ? _repository.getSchoolBannerList(schoolId: _args.schoolId)
+            : _repository.getBannerList(),
+        _repository.getMenuList(),
+        _repository.getMyInfo(),
+      ]);
 
-    final bannerItems = _parseBanners(responses[0].data);
-    final menus = _parseMenus(responses[1].data);
-    final vipExpireDate = _parseVipExpireDate(responses[2].data);
+      final bannerItems = _parseBanners(responses[0].data);
+      final menus = _parseMenus(responses[1].data);
+      final vipExpireDate = _parseVipExpireDate(responses[2].data);
 
-    final selectedMenuId = _resolveSelectedMenuId(menus, state.selectedMenuId);
-    final selectedChildId = _resolveSelectedChildId(
-      menus,
-      selectedMenuId,
-      state.selectedChildId,
-    );
+      final selectedMenuId = _resolveSelectedMenuId(menus, state.selectedMenuId);
+      final selectedChildId = _resolveSelectedChildId(
+        menus,
+        selectedMenuId,
+        state.selectedChildId,
+      );
 
-    state = state.copyWith(
-      banners: bannerItems,
-      menus: menus,
-      selectedMenuId: selectedMenuId,
-      selectedChildId: selectedChildId,
-      clearVipExpireDate: vipExpireDate == null,
-      vipExpireDate: vipExpireDate,
-      videoList: const [],
-      currentPage: 1,
-      hasMore: true,
-      clearDetail: true,
-      showDetailPanel: false,
-    );
+      state = state.copyWith(
+        banners: bannerItems,
+        menus: menus,
+        selectedMenuId: selectedMenuId,
+        selectedChildId: selectedChildId,
+        clearVipExpireDate: vipExpireDate == null,
+        vipExpireDate: vipExpireDate,
+        videoList: const [],
+        currentPage: 1,
+        hasMore: true,
+        clearDetail: true,
+        showDetailPanel: false,
+      );
 
-    await _loadVideoList(reset: true);
+      await _loadVideoList(reset: true);
+    } finally {
+      final completer = _myInfoReady;
+      if (completer != null && !completer.isCompleted) {
+        completer.complete();
+      }
+    }
   }
 
   Future<void> selectMenu(String? menuId) async {
@@ -235,6 +250,7 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
   }
 
   Future<String?> openDetail(VideoListItem item) async {
+    await _ensureVipInfoForCheck();
     final blockReason = _vipBlockReason(item.vip);
     if (blockReason != null) {
       return blockReason;
@@ -287,6 +303,8 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
     if (id.isEmpty) {
       return '视频信息缺失';
     }
+
+    await _ensureVipInfoForCheck();
 
     final cached = _detailCache[id];
     if (cached != null) {
@@ -723,6 +741,49 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
       return null;
     }
     return DateTime.tryParse(rawDate);
+  }
+
+  /// VIP 校验前确保会员信息已就绪。
+  ///
+  /// 从「我的收藏」等入口带 [openVideoId] 进入时，[openDetailById] 可能与
+  /// [refresh] 并发；若 myInfo 尚未回包，`vipExpireDate` 仍为 null，会把
+  /// 已开通会员误判为未开通。优先复用 Shell 已加载的用户态，否则等待首屏
+  /// refresh 中的 myInfo 完成。
+  Future<void> _ensureVipInfoForCheck() async {
+    _syncVipFromShellIfNeeded();
+
+    if (_ref.exists(shellControllerProvider)) {
+      final user = _ref.read(shellControllerProvider).user;
+      if (user.isMyInfoReady) {
+        return;
+      }
+    }
+
+    if (state.vipExpireDate != null) {
+      return;
+    }
+
+    final completer = _myInfoReady;
+    if (completer != null && !completer.isCompleted) {
+      await completer.future;
+    }
+  }
+
+  void _syncVipFromShellIfNeeded() {
+    if (state.vipExpireDate != null) {
+      return;
+    }
+    if (!_ref.exists(shellControllerProvider)) {
+      return;
+    }
+    final user = _ref.read(shellControllerProvider).user;
+    if (!user.isMyInfoReady) {
+      return;
+    }
+    state = state.copyWith(
+      clearVipExpireDate: user.vipExpireDate == null,
+      vipExpireDate: user.vipExpireDate,
+    );
   }
 
   String? _vipBlockReason(int vip) {

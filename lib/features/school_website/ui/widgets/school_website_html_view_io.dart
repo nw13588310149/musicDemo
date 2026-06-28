@@ -56,7 +56,7 @@ class _SchoolWebsiteHtmlViewState extends State<SchoolWebsiteHtmlView> {
   Future<void> _loadHtml() async {
     try {
       await _controller.loadHtmlString(
-        schoolWebsiteHtmlWithHiddenScrollbar(widget.html),
+        schoolWebsiteHtmlForEmbeddedView(widget.html),
       );
     } catch (_) {
       // WebView 已销毁等场景忽略。
@@ -65,11 +65,13 @@ class _SchoolWebsiteHtmlViewState extends State<SchoolWebsiteHtmlView> {
 
   @override
   Widget build(BuildContext context) {
-    return WebViewWidget(
-      controller: _controller,
-      gestureRecognizers: const <Factory<OneSequenceGestureRecognizer>>{
-        Factory<OneSequenceGestureRecognizer>(EagerGestureRecognizer.new),
-      },
+    return SizedBox.expand(
+      child: WebViewWidget(
+        controller: _controller,
+        gestureRecognizers: const <Factory<OneSequenceGestureRecognizer>>{
+          Factory<OneSequenceGestureRecognizer>(EagerGestureRecognizer.new),
+        },
+      ),
     );
   }
 }

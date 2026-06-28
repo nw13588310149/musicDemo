@@ -11,6 +11,27 @@ import 'widgets/circle_list_view.dart';
 import 'widgets/circle_publish_dialog.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
+/// 校圈页仅允许纵向滚动，禁止横向拖拽与 overscroll。
+class _CirclePageScrollBehavior extends MaterialScrollBehavior {
+  @override
+  Widget buildOverscrollIndicator(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
+    if (details.direction == AxisDirection.left ||
+        details.direction == AxisDirection.right) {
+      return child;
+    }
+    return super.buildOverscrollIndicator(context, child, details);
+  }
+
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) {
+    return const ClampingScrollPhysics();
+  }
+}
+
 class CirclePage extends ConsumerWidget {
   const CirclePage({super.key});
 
@@ -22,47 +43,59 @@ class CirclePage extends ConsumerWidget {
 
     // 顶部标题栏与下方内容区是两个独立的 16 圆角面板，
     // 中间留 16px 透明间距让 Dashboard 的 #EFF3FC 背景透出来。
-    return PopScope(
-      onPopInvokedWithResult: (didPop, _) {
-        controller.stopMediaPlayback();
-      },
-      child: Column(
-        children: [
-          _CircleHeader(
-            mode: state.mode,
-            onBack: () {
-              controller.stopMediaPlayback();
-              Navigator.of(context).maybePop();
-            },
-            onModeChanged: controller.setMode,
-          ),
-        SizedBox(height: ui(16)),
-        Expanded(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(ui(16)),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: _CircleBody(
-                    state: state,
-                    controller: controller,
-                    permissions: ref.watch(circlePermissionsProvider),
+    return ScrollConfiguration(
+      behavior: _CirclePageScrollBehavior(),
+      child: PopScope(
+        onPopInvokedWithResult: (didPop, _) {
+          controller.stopMediaPlayback();
+        },
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SizedBox(
+              width: constraints.maxWidth,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _CircleHeader(
+                    mode: state.mode,
+                    onBack: () {
+                      controller.stopMediaPlayback();
+                      Navigator.of(context).maybePop();
+                    },
+                    onModeChanged: controller.setMode,
                   ),
-                ),
-                // 沉浸模式下铺满全屏显示视频/图片，FAB 会挡视线，隐藏掉。
-                if (state.mode != CircleMode.immersive)
-                  Positioned(
-                    right: ui(20),
-                    bottom: ui(20),
-                    child: _PublishFab(
-                      onTap: () => showCirclePublishDialog(context),
+                  SizedBox(height: ui(16)),
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(ui(16)),
+                      child: Stack(
+                        clipBehavior: Clip.hardEdge,
+                        children: [
+                          Positioned.fill(
+                            child: _CircleBody(
+                              state: state,
+                              controller: controller,
+                              permissions: ref.watch(circlePermissionsProvider),
+                            ),
+                          ),
+                          // 沉浸模式下铺满全屏显示视频/图片，FAB 会挡视线，隐藏掉。
+                          if (state.mode != CircleMode.immersive)
+                            Positioned(
+                              right: ui(20),
+                              bottom: ui(20),
+                              child: _PublishFab(
+                                onTap: () => showCirclePublishDialog(context),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
-              ],
-            ),
-          ),
+                ],
+              ),
+            );
+          },
         ),
-      ],
       ),
     );
   }
@@ -88,7 +121,7 @@ class _CircleHeader extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
       height: ui(62),
-      padding: EdgeInsets.only(left: ui(15), right: ui(20)),
+      padding: EdgeInsets.symmetric(horizontal: ui(16)),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(ui(16)),
         image: DecorationImage(
@@ -281,6 +314,15 @@ class _CircleBody extends StatelessWidget {
       duration: const Duration(milliseconds: 200),
       switchInCurve: Curves.easeOut,
       switchOutCurve: Curves.easeIn,
+      layoutBuilder: (currentChild, previousChildren) {
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            ...previousChildren,
+            ?currentChild,
+          ],
+        );
+      },
       child: state.mode == CircleMode.immersive
           ? CircleImmersiveView(
               key: const ValueKey('immersive'),

@@ -775,6 +775,22 @@ abstract final class AppAssets {
   static const teacherHomeworkPublishIcon =
       'assets/images/smartCampus/teacher/homework/publish_icon.png';
 
+  /// 作业与批改 · 发布作业截止时间 / 学生我的作业截止时间。
+  static const homeworkDeadlineIcon =
+      'assets/images/smartCampus/teacher/homework/deadline_icon.png';
+
+  /// 作业点评抽屉 · 附件下载 / 在线预览 / 语音点评 / 删除语音。
+  static const homeworkReviewDownloadIcon =
+      'assets/images/smartCampus/teacher/homework/review_download_icon.png';
+  static const homeworkReviewPreviewIcon =
+      'assets/images/smartCampus/teacher/homework/review_preview_icon.png';
+  static const homeworkReviewVoiceIcon =
+      'assets/images/smartCampus/teacher/homework/review_voice_icon.png';
+  static const homeworkReviewVoiceActiveIcon =
+      'assets/images/smartCampus/teacher/homework/review_voice_active_icon.png';
+  static const homeworkReviewDeleteIcon =
+      'assets/images/smartCampus/teacher/homework/review_delete_icon.png';
+
   /// 任课老师 · 考评管理 · banner 右上角「历史月考」图标。
   static const teacherExamHistoryIcon =
       'assets/images/smartCampus/teacher/exam/history_icon.png';

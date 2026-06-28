@@ -59,6 +59,7 @@ import '../../../core/network/upload_result.dart';
 import '../../recording_system/audio/recording_capture.dart';
 import '../../recording_system/audio/recording_bytes_loader.dart';
 import '../../courseware/ui/courseware_url_opener.dart';
+import 'widgets/homework_asset_icon.dart';
 import 'widgets/homework_voice_comment.dart';
 import 'student_homework_submission_preview.dart';
 import '../../../core/widgets/app_date_time_pickers.dart';
@@ -238,7 +239,6 @@ const Color _kTextMuted = Color(0xFF71717A);
 const Color _kPurple = Color(0xFF8741FF);
 const Color _kPurpleEnd = Color(0xFFB68EFF);
 const Color _kPurpleStart = Color(0xFF8640FF);
-const Color _kPurpleLight = Color(0xFFB48BFF);
 const Color _kRecordRed = Color(0xFFFF323C);
 const Color _kRecordRedLight = Color(0xFFFF7A7A);
 const Color _kOrange = Color(0xFFFF6A00);
@@ -2807,7 +2807,10 @@ class _DeadlinePicker extends StatelessWidget {
                 ),
               ),
             ),
-            Icon(Icons.calendar_today_rounded, size: ui(16), color: _kPurple),
+            HomeworkAssetIcon(
+              AppAssets.homeworkDeadlineIcon,
+              size: ui(16),
+            ),
           ],
         ),
       ),
@@ -3770,14 +3773,12 @@ class _VoiceCommentFieldState extends State<_VoiceCommentField> {
         ),
         SizedBox(width: ui(8)),
         _VoiceMiniAction(
-          icon: Icons.mic_none_rounded,
-          color: _kPurple,
+          assetIcon: AppAssets.homeworkReviewVoiceIcon,
           onTap: () => setState(() => _phase = _VoicePhase.idle),
         ),
         SizedBox(width: ui(6)),
         _VoiceMiniAction(
-          icon: Icons.delete_outline_rounded,
-          color: _kOrange,
+          assetIcon: AppAssets.homeworkReviewDeleteIcon,
           onTap: _delete,
         ),
       ],
@@ -3809,9 +3810,46 @@ class _HomeworkVoiceHoldBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final useRed = recording && willCancel;
-    final gradColors = useRed
-        ? const [_kRecordRed, _kRecordRedLight]
-        : const [_kPurple, _kPurpleLight];
+    final useActiveIcon = recording && !useRed;
+
+    Widget iconChild;
+    BoxDecoration? decoration;
+
+    if (useActiveIcon) {
+      iconChild = HomeworkAssetIcon(
+        AppAssets.homeworkReviewVoiceActiveIcon,
+        size: ui(_kButtonSize),
+      );
+      decoration = null;
+    } else if (useRed) {
+      iconChild = HomeworkAssetIcon(
+        AppAssets.homeworkReviewVoiceIcon,
+        size: ui(_kButtonSize),
+        colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+      );
+      decoration = BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [_kRecordRed, _kRecordRedLight],
+        ),
+        borderRadius: BorderRadius.circular(ui(10)),
+        boxShadow: [
+          BoxShadow(
+            color: _kRecordRed.withValues(alpha: 0.18),
+            blurRadius: ui(8),
+            offset: Offset(0, ui(2)),
+          ),
+        ],
+      );
+    } else {
+      iconChild = HomeworkAssetIcon(
+        AppAssets.homeworkReviewVoiceIcon,
+        size: ui(_kButtonSize),
+      );
+      decoration = null;
+    }
+
     return Opacity(
       opacity: enabled ? 1 : 0.45,
       child: GestureDetector(
@@ -3822,29 +3860,14 @@ class _HomeworkVoiceHoldBar extends StatelessWidget {
             : null,
         onLongPressEnd: enabled ? (_) => onPressEnd() : null,
         onLongPressCancel: enabled ? onPressEnd : null,
-        child: Container(
-          width: ui(_kButtonSize),
-          height: ui(_kButtonSize),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-              colors: gradColors,
-            ),
-            borderRadius: BorderRadius.circular(ui(10)),
-            boxShadow: [
-              BoxShadow(
-                color: (useRed ? _kRecordRed : _kPurple).withValues(alpha: 0.18),
-                blurRadius: ui(8),
-                offset: Offset(0, ui(2)),
-              ),
-            ],
-          ),
-          child: Icon(
-            Icons.mic_rounded,
-            color: Colors.white,
-            size: ui(22),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(ui(10)),
+          child: Container(
+            width: ui(_kButtonSize),
+            height: ui(_kButtonSize),
+            alignment: Alignment.center,
+            decoration: decoration,
+            child: iconChild,
           ),
         ),
       ),
@@ -3957,13 +3980,11 @@ class _HomeworkLiveBigWaveform extends StatelessWidget {
 
 class _VoiceMiniAction extends StatelessWidget {
   const _VoiceMiniAction({
-    required this.icon,
-    required this.color,
+    required this.assetIcon,
     required this.onTap,
   });
 
-  final IconData icon;
-  final Color color;
+  final String assetIcon;
   final VoidCallback onTap;
 
   @override
@@ -3971,14 +3992,10 @@ class _VoiceMiniAction extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return GestureDetector(
       onTap: onTap,
-      child: Container(
+      child: SizedBox(
         width: ui(36),
         height: ui(36),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(ui(8)),
-        ),
-        child: Icon(icon, size: ui(18), color: color),
+        child: HomeworkAssetIcon(assetIcon, size: ui(36)),
       ),
     );
   }
@@ -4171,13 +4188,13 @@ class _AttachmentCard extends StatelessWidget {
           ),
           SizedBox(width: ui(8)),
           _GhostButton(
-            icon: Icons.file_download_outlined,
+            assetIcon: AppAssets.homeworkReviewDownloadIcon,
             label: '下载',
             onTap: onDownload,
           ),
           SizedBox(width: ui(8)),
           _GhostButton(
-            icon: Icons.remove_red_eye_outlined,
+            assetIcon: AppAssets.homeworkReviewPreviewIcon,
             label: '在线预览',
             onTap: onPreview,
           ),
@@ -4189,12 +4206,12 @@ class _AttachmentCard extends StatelessWidget {
 
 class _GhostButton extends StatelessWidget {
   const _GhostButton({
-    required this.icon,
+    required this.assetIcon,
     required this.label,
     required this.onTap,
   });
 
-  final IconData icon;
+  final String assetIcon;
   final String label;
   final VoidCallback onTap;
 
@@ -4215,7 +4232,7 @@ class _GhostButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: ui(14), color: _kPillIconColor),
+            HomeworkAssetIcon(assetIcon, size: ui(14)),
             SizedBox(width: ui(4)),
             Text(
               label,

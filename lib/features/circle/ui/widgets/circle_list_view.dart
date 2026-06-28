@@ -11,7 +11,7 @@ import '../../state/circle_controller.dart';
 import '../../state/circle_state.dart';
 import 'circle_post_card.dart';
 
-/// 列表模式：3 列瀑布流。沿 Y 方向按列累计高度，把每个卡片填到当前最矮的那一列。
+/// 列表模式：瀑布流。沿 Y 方向按列累计高度，把每个卡片填到当前最矮的那一列。
 class CircleListView extends StatelessWidget {
   const CircleListView({
     super.key,
@@ -23,6 +23,12 @@ class CircleListView extends StatelessWidget {
   final CircleState state;
   final CircleController controller;
   final CirclePermissions permissions;
+
+  static int _columnCount(double width, double Function(double) ui) {
+    if (width < ui(520)) return 1;
+    if (width < ui(900)) return 2;
+    return 3;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -71,10 +77,13 @@ class CircleListView extends StatelessWidget {
         onRefresh: () => controller.refreshPosts(),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            const columns = 3;
             final gap = ui(16);
-            final available = constraints.maxWidth;
-            final colWidth = (available - gap * (columns - 1)) / columns;
+            final horizontalPadding = gap;
+            final available =
+                constraints.maxWidth - horizontalPadding * 2;
+            final columns = _columnCount(available, ui);
+            final colWidth =
+                (available - gap * (columns - 1)) / columns;
 
             final columnsContent = List<List<CirclePost>>.generate(
               columns,
@@ -96,40 +105,50 @@ class CircleListView extends StatelessWidget {
             }
 
             return SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: EdgeInsets.only(bottom: gap),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (var i = 0; i < columns; i++) ...[
-                    if (i > 0) SizedBox(width: gap),
-                    SizedBox(
-                      width: colWidth,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          for (final post in columnsContent[i]) ...[
-                            CirclePostCard(
-                              post: post,
-                              onLike: () => _withToast(
-                                context,
-                                () => controller.toggleLike(post.id),
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: ClampingScrollPhysics(),
+              ),
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                0,
+                horizontalPadding,
+                gap,
+              ),
+              child: SizedBox(
+                width: available,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var i = 0; i < columns; i++) ...[
+                      if (i > 0) SizedBox(width: gap),
+                      SizedBox(
+                        width: colWidth,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (final post in columnsContent[i]) ...[
+                              CirclePostCard(
+                                post: post,
+                                onLike: () => _withToast(
+                                  context,
+                                  () => controller.toggleLike(post.id),
+                                ),
+                                onComment: () => _onCommentTap(post.id),
+                                onFavorite: () =>
+                                    controller.toggleFavorite(post.id),
+                                onTap: () => _onCardTap(post.id),
+                                onDeletePost: permissions.canDeletePost(post)
+                                    ? () => _confirmDeletePost(context, post)
+                                    : null,
                               ),
-                              onComment: () => _onCommentTap(post.id),
-                              onFavorite: () =>
-                                  controller.toggleFavorite(post.id),
-                              onTap: () => _onCardTap(post.id),
-                              onDeletePost: permissions.canDeletePost(post)
-                                  ? () => _confirmDeletePost(context, post)
-                                  : null,
-                            ),
-                            SizedBox(height: gap),
+                              SizedBox(height: gap),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
-                    ),
+                    ],
                   ],
-                ],
+                ),
               ),
             );
           },

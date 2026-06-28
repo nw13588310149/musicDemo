@@ -34,6 +34,7 @@ class CircleActionButton extends StatelessWidget {
     this.dark = false,
     this.iconSize,
     this.coloredIcon,
+    this.looseWidth = false,
   });
 
   final String iconAsset;
@@ -47,6 +48,9 @@ class CircleActionButton extends StatelessWidget {
   /// 当 dark=true 但仍需要保留资源原色（例如已点赞的红心）时填 null；
   /// 否则可通过 [Color] 让 png 转为指定颜色（如沉浸态默认白）。
   final Color? coloredIcon;
+
+  /// 列表态在窄列卡片内使用：不套固定宽度，避免三列瀑布流横向溢出。
+  final bool looseWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -117,7 +121,7 @@ class CircleActionButton extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      child: dark
+      child: dark || looseWidth
           ? body
           : SizedBox(
               width: _listActionButtonWidth(ui),
@@ -147,26 +151,42 @@ class CircleActionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
     return Row(
       children: [
-        CircleActionButton(
-          iconAsset: post.liked ? AppAssets.circleFav1 : AppAssets.circleFav2,
-          count: post.likeCount,
-          onTap: onLike,
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: CircleActionButton(
+              iconAsset:
+                  post.liked ? AppAssets.circleFav1 : AppAssets.circleFav2,
+              count: post.likeCount,
+              onTap: onLike,
+              looseWidth: true,
+            ),
+          ),
         ),
-        SizedBox(width: ui(16)),
-        CircleActionButton(
-          iconAsset: AppAssets.circleMsg1,
-          count: post.commentCount,
-          onTap: onComment,
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: CircleActionButton(
+              iconAsset: AppAssets.circleMsg1,
+              count: post.commentCount,
+              onTap: onComment,
+              looseWidth: true,
+            ),
+          ),
         ),
-        SizedBox(width: ui(16)),
-        CircleActionButton(
-          iconAsset:
-              post.favorited ? AppAssets.circleSc1 : AppAssets.circleSc2,
-          count: post.favoriteCount,
-          onTap: onFavorite,
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: CircleActionButton(
+              iconAsset:
+                  post.favorited ? AppAssets.circleSc1 : AppAssets.circleSc2,
+              count: post.favoriteCount,
+              onTap: onFavorite,
+              looseWidth: true,
+            ),
+          ),
         ),
       ],
     );

@@ -155,11 +155,14 @@ class _CircleImmersiveViewState extends State<CircleImmersiveView> {
 
     return Container(
       color: const Color(0xFF0B081A),
+      clipBehavior: Clip.hardEdge,
       child: Stack(
+        clipBehavior: Clip.hardEdge,
         children: [
           PageView.builder(
             controller: _pageController,
             scrollDirection: Axis.vertical,
+            physics: const ClampingScrollPhysics(),
             itemCount: posts.length,
             onPageChanged: controller.setImmersiveIndex,
             itemBuilder: (context, index) {

@@ -50,6 +50,7 @@ import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_assets.dart';
+import 'widgets/homework_asset_icon.dart';
 import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
@@ -1943,6 +1944,11 @@ class _CardMetaRow extends StatelessWidget {
             SizedBox(width: ui(8)),
             Container(width: 1, height: ui(10), color: _kTextHint),
             SizedBox(width: ui(8)),
+            HomeworkAssetIcon(
+              AppAssets.homeworkDeadlineIcon,
+              size: ui(12),
+            ),
+            SizedBox(width: ui(4)),
             Text(
               '截止时间：',
               style: TextStyle(
@@ -2253,24 +2259,18 @@ class _ReviewMediaTile extends StatelessWidget {
         ),
       );
     }
-    return Container(
+    return SizedBox(
       width: ui(40),
       height: ui(40),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE5EFFF),
-        borderRadius: BorderRadius.circular(ui(8)),
-        border: Border.all(color: const Color(0xFFE5EFFF)),
-      ),
       child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          Positioned.fill(
-            child: Center(
-              child: Icon(
-                Icons.graphic_eq_rounded,
-                size: ui(16),
-                color: _kPurple,
-              ),
-            ),
+          Positioned(
+            left: ui(6),
+            right: ui(6),
+            top: ui(6),
+            bottom: ui(18),
+            child: HomeworkAssetIcon.expand(AppAssets.homeworkReviewVoiceIcon),
           ),
           Positioned(
             left: ui(6),
@@ -3216,10 +3216,9 @@ class _HomeworkDetailDialogState extends ConsumerState<_HomeworkDetailDialog> {
                     ),
                     child: Row(
                       children: [
-                        Icon(
-                          Icons.open_in_new_rounded,
+                        HomeworkAssetIcon(
+                          AppAssets.homeworkReviewPreviewIcon,
                           size: ui(16),
-                          color: _kBlueLink,
                         ),
                         SizedBox(width: ui(6)),
                         Text(

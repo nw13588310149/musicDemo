@@ -4,6 +4,7 @@ import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dar
 
 import '../../../app/router/route_paths.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../circle/ui/circle_page.dart';
 import '../../shell/state/shell_controller.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/smart_campus_controller.dart';
@@ -171,11 +172,32 @@ class _SmartCampusPageBody extends ConsumerWidget {
         state.selectedRole == SmartCampusRole.teacher ||
         state.selectedRole == SmartCampusRole.headTeacher;
 
-    // "校圈"快捷入口跨身份共享：跳转到首页同名 CirclePage，避免在智慧校园
-    // 内部又重复实现一份社区列表。Navigator.pushNamed 是以本 widget 的
-    // BuildContext 作 anchor，rootNavigator 默认即可。
+    // 校圈全屏 overlay：不再 pushNamed 套一层 ShellScaffold，避免移动端
+    // 重复侧栏占位导致内容区只有左侧 inset、右侧贴边。
     void openSchoolCircle() {
-      Navigator.of(context).pushNamed(RoutePaths.circle);
+      final scale = DashboardScaleScope.of(context);
+      final inset = scale.ui(ShellLayoutSpec.pageGap);
+      Navigator.of(context).push(
+        PageRouteBuilder<void>(
+          opaque: true,
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+          pageBuilder: (context, animation, secondaryAnimation) {
+            return ColoredBox(
+              color: const Color(0xFFEFF3FC),
+              child: SafeArea(
+                child: Padding(
+                  padding: EdgeInsets.all(inset),
+                  child: DashboardScaleScope(
+                    data: scale,
+                    child: const CirclePage(),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      );
     }
 
     Widget buildPrincipalMailboxRoute() {
