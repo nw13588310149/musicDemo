@@ -38,7 +38,7 @@
 //     共享同一上传通道）、备注 textarea。提交成功后把卡片状态切到「已提交·
 //     批阅中」并填充提交文件名。
 //   · "作业详情"（_showDetailDialog）：同款 GradientHeaderDialog，只读展示
-//     发布老师 / 截止时间 / 作业要求 / 提交情况 / 教师反馈。
+//     发布老师 / 截止时间 / 作业要求 / 提交情况 / 得分（已批阅）/ 教师反馈。
 // =============================================================================
 
 import 'dart:typed_data';
@@ -3131,6 +3131,19 @@ class _HomeworkDetailDialogState extends ConsumerState<_HomeworkDetailDialog> {
               _SubjectTag(subject: _d.subject),
               SizedBox(width: ui(8)),
               _DetailStatusTag(label: _statusLabel(_d)),
+              if (_d.score != null) ...[
+                SizedBox(width: ui(8)),
+                Text(
+                  _d.score!,
+                  style: TextStyle(
+                    fontSize: ui(14),
+                    color: _kBlueLink,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w500,
+                    height: 1,
+                  ),
+                ),
+              ],
             ],
           ),
           SizedBox(height: ui(12)),

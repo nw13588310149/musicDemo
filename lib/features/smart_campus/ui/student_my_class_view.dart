@@ -384,6 +384,22 @@ String _userDisplayName(Map<String, dynamic>? user) {
   ], '—');
 }
 
+String _joinDormitoryTeacherNames(
+  List<Map<String, dynamic>> dormitoryTeachers,
+  Map<String, dynamic>? headTeacher,
+) {
+  final headTeacherId = headTeacher == null
+      ? ''
+      : _pickString(_flattenUserMap(headTeacher), ['id'], '');
+  final names = <String>[
+    for (final teacher in dormitoryTeachers)
+      if (headTeacherId.isEmpty ||
+          _pickString(_flattenUserMap(teacher), ['id'], '') != headTeacherId)
+        if (_userDisplayName(teacher) != '—') _userDisplayName(teacher),
+  ];
+  return names.isEmpty ? '—' : names.join('，');
+}
+
 String _pickAvatarUrl(Map<String, dynamic>? user) {
   if (user == null) return '';
   final flat = _flattenUserMap(user);
@@ -418,6 +434,7 @@ _ParsedMySchoolClass _parseMySchoolClass(dynamic raw, String currentUserId) {
   final schoolClass = _asMap(map['schoolClass']);
   final schoolClassroom = _asMap(map['schoolClassroom']);
   final headTeacher = _asMap(map['headTeacher']);
+  final dormitoryTeachers = _asMapList(map['dormitoryTeacherList']);
   final students = _asMapList(map['studentInfoList']);
   final teachers = _asMapList(map['teacherList']);
   final genderCounts = _asMapList(map['genderCountList']);
@@ -459,7 +476,7 @@ _ParsedMySchoolClass _parseMySchoolClass(dynamic raw, String currentUserId) {
     name: className,
     subtitle: subtitleParts.join(' · '),
     headTeacher: _userDisplayName(headTeacher),
-    counselor: '—',
+    counselor: _joinDormitoryTeacherNames(dormitoryTeachers, headTeacher),
     classroom: classroom,
     footer: footer,
     totalCount: totalCount,

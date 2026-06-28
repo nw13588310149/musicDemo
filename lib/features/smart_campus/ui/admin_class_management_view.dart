@@ -543,6 +543,7 @@ class _ClassEntry {
     String? name,
     List<_StudentRecord>? students,
     String? teacherIds,
+    String? classroomId,
   }) {
     final classId = readSnowflakeId(id);
     if (classId == null || classId.isEmpty || classId.startsWith('srv-')) {
@@ -564,21 +565,29 @@ class _ClassEntry {
         ? (readSnowflakeId(headTeacherId) ?? headTeacherId!)
         : '0';
 
+    final resolvedClassroomId = classroomId ??
+        ((this.classroomId != null && this.classroomId!.isNotEmpty)
+            ? this.classroomId!
+            : '0');
+
     return <String, dynamic>{
       'id': classId,
       'campusId': campusId ?? 0,
       'name': name ?? this.name,
       'classCode': code,
       'headTeacherId': headId,
-      'classroomId': (classroomId != null && classroomId!.isNotEmpty)
-          ? classroomId!
-          : '0',
+      'classroomId': resolvedClassroomId,
       'teacherIds': teacherIds ?? this.teacherIds ?? '',
       'studentIds': studentIdList,
     };
   }
 
-  _ClassEntry copyWith({List<_StudentRecord>? students, String? name}) {
+  _ClassEntry copyWith({
+    List<_StudentRecord>? students,
+    String? name,
+    String? classroom,
+    String? classroomId,
+  }) {
     return _ClassEntry(
       id: id,
       name: name ?? this.name,
@@ -592,8 +601,8 @@ class _ClassEntry {
       headTeacherGender: headTeacherGender,
       headTeacherIntroduce: headTeacherIntroduce,
       headTeacherId: headTeacherId,
-      classroom: classroom,
-      classroomId: classroomId,
+      classroom: classroom ?? this.classroom,
+      classroomId: classroomId ?? this.classroomId,
       campusId: campusId,
       teacherIds: teacherIds,
       announcement: announcement,
@@ -1110,6 +1119,9 @@ class _AdminClassManagementViewState
             ensureClassTeachers: _ensureClassTeachers,
             ensureClassStudents: _ensureClassStudents,
             onRename: () => _promptRenameClass(entry),
+            onEditClassroom: entry.kind == _ClassKind.largeClass
+                ? () => _promptEditClassroom(entry)
+                : null,
           ),
         ),
       ),
@@ -1138,6 +1150,64 @@ class _AdminClassManagementViewState
       orElse: () => entry,
     );
     await _submitClassNameUpdate(target: latest, newName: newName);
+  }
+
+  Future<void> _promptEditClassroom(_ClassEntry entry) async {
+    final options = await _ensureOptions();
+    if (!mounted) return;
+
+    _ClassroomOption? initial;
+    if (entry.classroomId != null && entry.classroomId!.isNotEmpty) {
+      initial = options.classrooms.cast<_ClassroomOption?>().firstWhere(
+        (r) => r?.id == entry.classroomId,
+        orElse: () => entry.classroom.isNotEmpty
+            ? _ClassroomOption(id: entry.classroomId!, name: entry.classroom)
+            : null,
+      );
+    }
+
+    _ClassroomOption? picked;
+    final confirmed = await showScaledDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.18),
+      builder: (dialogContext) {
+        var value = initial;
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return GradientHeaderDialog(
+              title: '修改固定教室',
+              headerHeight: 169,
+              gradientMidStop: 0.35,
+              actionBar: AppDialogActionBar(
+                cancelLabel: '取消',
+                confirmLabel: '保存',
+                onCancel: () =>
+                    Navigator.of(dialogContext, rootNavigator: true).pop(false),
+                onConfirm: () {
+                  picked = value;
+                  Navigator.of(
+                    dialogContext,
+                    rootNavigator: true,
+                  ).pop(true);
+                },
+              ),
+              child: PopupSelectorField<_ClassroomOption?>(
+                value: value,
+                items: <_ClassroomOption?>[null, ...options.classrooms],
+                itemLabel: (r) => r == null ? '请选择' : r.name,
+                onChanged: (r) => setDialogState(() => value = r),
+              ),
+            );
+          },
+        );
+      },
+    );
+    if (!mounted || confirmed != true) return;
+    final latest = _classes.firstWhere(
+      (c) => c.id == entry.id,
+      orElse: () => entry,
+    );
+    await _submitClassroomUpdate(target: latest, classroom: picked);
   }
 
   Future<bool> _submitClassNameUpdate({
@@ -1169,6 +1239,41 @@ class _AdminClassManagementViewState
       return false;
     }
     AppToast.show(context, '班级名称已更新');
+    await _loadClasses();
+    return true;
+  }
+
+  Future<bool> _submitClassroomUpdate({
+    required _ClassEntry target,
+    required _ClassroomOption? classroom,
+  }) async {
+    if (target.id.isEmpty) {
+      AppToast.show(context, '班级 id 不可用');
+      return false;
+    }
+
+    final newClassroomId =
+        (classroom != null && classroom.id.isNotEmpty) ? classroom.id : '0';
+    final oldClassroomId = (target.classroomId != null &&
+            target.classroomId!.isNotEmpty)
+        ? target.classroomId!
+        : '0';
+    if (newClassroomId == oldClassroomId) return true;
+
+    final body = target.toClassUpdateBody(classroomId: newClassroomId);
+    if (body == null) {
+      AppToast.show(context, '班级 id 不可用');
+      return false;
+    }
+
+    final repo = ref.read(adminRepositoryProvider);
+    final resp = await repo.classUpdate(body);
+    if (!mounted) return false;
+    if (!resp.isSuccess) {
+      AppToast.show(context, resp.displayMsg);
+      return false;
+    }
+    AppToast.show(context, '固定教室已更新');
     await _loadClasses();
     return true;
   }
@@ -3803,6 +3908,7 @@ class _ClassDetailDrawer extends StatefulWidget {
     required this.ensureClassTeachers,
     required this.ensureClassStudents,
     required this.onRename,
+    this.onEditClassroom,
   });
 
   final _ClassEntry entry;
@@ -3813,6 +3919,7 @@ class _ClassDetailDrawer extends StatefulWidget {
   final Future<List<_StudentRecord>> Function(_ClassEntry entry)
   ensureClassStudents;
   final VoidCallback onRename;
+  final VoidCallback? onEditClassroom;
 
   @override
   State<_ClassDetailDrawer> createState() => _ClassDetailDrawerState();
@@ -3909,6 +4016,7 @@ class _ClassDetailDrawerState extends State<_ClassDetailDrawer> {
                                 value: entry.classroom.isEmpty
                                     ? '—'
                                     : entry.classroom,
+                                onEdit: widget.onEditClassroom,
                               ),
                               _ClassDetailRow(
                                 label: '群聊状态：',

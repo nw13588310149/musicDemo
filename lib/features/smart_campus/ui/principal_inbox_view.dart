@@ -13,6 +13,7 @@ import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/principal_inbox_data.dart';
 import '../data/principal_mailbox_repository.dart';
+import 'mailbox_attachment_widgets.dart';
 
 const Color _kPageBg = Color(0xFFEFF3FC);
 const Color _kBorderSoft = Color(0xFFF3F2F3);
@@ -420,6 +421,25 @@ class _InboxCard extends StatelessWidget {
               height: 1.5,
             ),
           ),
+          if (item.attachments.isNotEmpty) ...[
+            SizedBox(height: ui(10)),
+            Wrap(
+              spacing: ui(8),
+              runSpacing: ui(8),
+              children: [
+                for (var i = 0; i < item.attachments.length; i++)
+                  MailboxAttachmentChip(
+                    url: item.attachments[i],
+                    onTap: () => previewMailboxAttachment(
+                      context,
+                      attachments: item.attachments,
+                      index: i,
+                      heroTagPrefix: 'inbox_${item.id}',
+                    ),
+                  ),
+              ],
+            ),
+          ],
           if (hasReply) ...[
             SizedBox(height: ui(12)),
             Container(

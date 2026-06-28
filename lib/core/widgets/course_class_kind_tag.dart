@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 import '../../features/shell/ui/shell_layout.dart';
 import 'course_inline_tag_style.dart';
@@ -25,7 +24,6 @@ class CourseClassKindTag extends StatelessWidget {
   /// 圆点色；为空时小课绿 / 大课紫，[muted] 时为灰。
   final Color? dotColor;
 
-  static const Color _kBorderSoft = Color(0xFFF3F2F3);
   static const Color _kTextDark = Color(0xFF0B081A);
   static const Color _kMuted = Color(0xFFB6B5BB);
   static const Color _kSmallDot = Color(0xFF0CAC40);
@@ -41,15 +39,10 @@ class CourseClassKindTag extends StatelessWidget {
     final textColor = muted ? _kMuted : _kTextDark;
     final label = isSmall ? '小课' : '大课';
 
-    return Container(
-      height: ui(CourseInlineTagStyle.height),
-      padding: EdgeInsets.symmetric(horizontal: ui(4)),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(CourseInlineTagStyle.borderRadius)),
-        border: outlined ? Border.all(color: _kBorderSoft) : null,
-      ),
+    return CourseInlineTagStyle.build(
+      ui: ui,
+      backgroundColor: Colors.white,
+      outlined: outlined,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -65,13 +58,7 @@ class CourseClassKindTag extends StatelessWidget {
           SizedBox(width: ui(4)),
           Text(
             label,
-            style: TextStyle(
-              fontSize: ui(12),
-              color: textColor,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w400,
-              height: 15.24 / 12,
-            ),
+            style: CourseInlineTagStyle.textStyle(ui: ui, color: textColor),
           ),
         ],
       ),

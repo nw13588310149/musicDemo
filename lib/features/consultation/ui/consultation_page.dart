@@ -275,7 +275,7 @@ class _ConsultationBanner extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(ui(12)),
         child: Image.asset(
-          'assets/images/home/consultation_banner.jpg',
+          'assets/images/home/consultation_banner.png',
           fit: BoxFit.cover,
           errorBuilder: (context, error, stack) {
             return Container(

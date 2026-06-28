@@ -35,15 +35,13 @@ import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dar
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_toast.dart';
-import '../../../core/widgets/image_gallery_viewer.dart';
 import '../../courseware/state/cloud_drive_controller.dart';
 import '../../courseware/ui/courseware_file_picker.dart';
-import '../../courseware/ui/courseware_url_opener.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../../../core/constants/app_assets.dart';
 import '../data/principal_mailbox_repository.dart';
+import 'mailbox_attachment_widgets.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 const Color _kPageBg = Color(0xFFEFF3FC);
@@ -1418,9 +1416,9 @@ class _MailboxRecordTile extends StatelessWidget {
               runSpacing: ui(8),
               children: [
                 for (var i = 0; i < record.attachments.length; i++)
-                  _AttachmentChip(
+                  MailboxAttachmentChip(
                     url: record.attachments[i],
-                    onTap: () => _previewAttachment(
+                    onTap: () => previewMailboxAttachment(
                       context,
                       attachments: record.attachments,
                       index: i,
@@ -1554,140 +1552,6 @@ class _KindBadge extends StatelessWidget {
       ),
     );
   }
-}
-
-class _AttachmentChip extends StatelessWidget {
-  const _AttachmentChip({required this.url, this.onTap});
-
-  final String url;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final name = url.split('/').isNotEmpty ? url.split('/').last : url;
-    final isImage = _isImageUrl(url);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(6)),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: ui(10), vertical: ui(6)),
-        decoration: BoxDecoration(
-          color: _kInnerGray,
-          borderRadius: BorderRadius.circular(ui(6)),
-          border: Border.all(color: _kBorderDash),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              isImage
-                  ? Icons.image_outlined
-                  : Icons.attach_file_rounded,
-              size: ui(14),
-              color: _kTextHint,
-            ),
-            SizedBox(width: ui(4)),
-            ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: ui(160)),
-              child: Text(
-                name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: _kTextDark,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 1.2,
-                ),
-              ),
-            ),
-            if (onTap != null) ...[
-              SizedBox(width: ui(4)),
-              Icon(
-                isImage
-                    ? Icons.zoom_out_map_rounded
-                    : Icons.open_in_new_rounded,
-                size: ui(12),
-                color: _kPurple,
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// 单击附件 chip 时的预览逻辑：
-/// - 图片：聚合该条记录的全部图片附件，按当前 chip 在「图片子集」内的
-///   顺序打开 [showImageGallery]，支持左右滑动切换；
-/// - 非图片（pdf / doc / 其它）：调用 [openCoursewareUrl] 在新浏览器
-///   标签页打开（web 端），其它平台暂为 no-op，给出 toast 提示。
-///
-/// `attachments` 为该条记录的全部附件 URL（已按英文逗号拆分），
-/// `index` 为被点击 chip 在该数组中的位置。
-void _previewAttachment(
-  BuildContext context, {
-  required List<String> attachments,
-  required int index,
-  required String heroTagPrefix,
-}) {
-  if (index < 0 || index >= attachments.length) return;
-  final raw = attachments[index].trim();
-  if (raw.isEmpty) return;
-  final resolved = MediaUrl.resolve(raw);
-  if (_isImageUrl(raw)) {
-    final imageUrls = <String>[];
-    int initialIndex = 0;
-    for (var i = 0; i < attachments.length; i++) {
-      final a = attachments[i].trim();
-      if (a.isEmpty || !_isImageUrl(a)) continue;
-      if (i == index) initialIndex = imageUrls.length;
-      imageUrls.add(MediaUrl.resolve(a));
-    }
-    if (imageUrls.isEmpty) {
-      AppToast.show(context, '附件无法预览');
-      return;
-    }
-    showImageGallery(
-      context,
-      images: imageUrls,
-      initialIndex: initialIndex,
-      heroTagPrefix: heroTagPrefix,
-    );
-    return;
-  }
-
-  if (resolved.isEmpty) {
-    AppToast.show(context, '附件链接无效');
-    return;
-  }
-  openCoursewareUrl(resolved);
-}
-
-/// 仅按扩展名（最后一个 `.` 后的字符串）粗略判断是否为图片。覆盖常见
-/// 的 jpg / jpeg / png / gif / webp / bmp / svg / heic 几种格式；带 query
-/// 参数（如 `foo.jpg?x=1`）也能正确识别。
-bool _isImageUrl(String url) {
-  final value = url.trim().toLowerCase();
-  if (value.isEmpty) return false;
-  final cleaned = value.split('?').first.split('#').first;
-  final dot = cleaned.lastIndexOf('.');
-  if (dot < 0 || dot == cleaned.length - 1) return false;
-  final ext = cleaned.substring(dot + 1);
-  return const {
-    'jpg',
-    'jpeg',
-    'png',
-    'gif',
-    'webp',
-    'bmp',
-    'svg',
-    'heic',
-    'heif',
-  }.contains(ext);
 }
 
 // ============================================================================

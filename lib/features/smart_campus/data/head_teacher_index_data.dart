@@ -27,6 +27,35 @@ class HeadTeacherClassItem {
   }
 }
 
+/// `headTeacherIndex` 待办 / 近期动态条目（`todoList` / `recentList`）。
+class HeadTeacherFeedItem {
+  const HeadTeacherFeedItem({
+    required this.title,
+    required this.desc,
+    required this.tag,
+  });
+
+  final String title;
+  final String desc;
+  final String tag;
+
+  factory HeadTeacherFeedItem.fromJson(Map<String, dynamic> json) {
+    return HeadTeacherFeedItem(
+      title: _pickString(json, ['title'], ''),
+      desc: _pickString(json, ['desc', 'description', 'subtitle'], ''),
+      tag: _pickString(json, ['tag'], ''),
+    );
+  }
+
+  HeadTeacherBoardItem toBoardItem() {
+    return HeadTeacherBoardItem(
+      time: title,
+      title: desc,
+      tag: tag,
+    );
+  }
+}
+
 class HeadTeacherIndexRes {
   const HeadTeacherIndexRes({
     required this.chatUnreadCount,
@@ -35,6 +64,8 @@ class HeadTeacherIndexRes {
     required this.pendingLeaveCount,
     required this.pendingMakeupCount,
     required this.todayAbnormalDormCount,
+    required this.todoList,
+    required this.recentList,
   });
 
   final int chatUnreadCount;
@@ -43,6 +74,8 @@ class HeadTeacherIndexRes {
   final int pendingLeaveCount;
   final int pendingMakeupCount;
   final int todayAbnormalDormCount;
+  final List<HeadTeacherFeedItem> todoList;
+  final List<HeadTeacherFeedItem> recentList;
 
   static const zero = HeadTeacherIndexRes(
     chatUnreadCount: 0,
@@ -51,6 +84,8 @@ class HeadTeacherIndexRes {
     pendingLeaveCount: 0,
     pendingMakeupCount: 0,
     todayAbnormalDormCount: 0,
+    todoList: [],
+    recentList: [],
   );
 
   int get totalStudentCount =>
@@ -110,6 +145,10 @@ class HeadTeacherBoardItem {
 List<HeadTeacherBoardItem> buildHeadTeacherTodoBoardItems(
   HeadTeacherIndexRes res,
 ) {
+  if (res.todoList.isNotEmpty) {
+    return [for (final item in res.todoList) item.toBoardItem()];
+  }
+
   final items = <HeadTeacherBoardItem>[];
   if (res.pendingLeaveCount > 0) {
     items.add(
@@ -144,6 +183,10 @@ List<HeadTeacherBoardItem> buildHeadTeacherTodoBoardItems(
 List<HeadTeacherBoardItem> buildHeadTeacherRecentBoardItems(
   HeadTeacherIndexRes res,
 ) {
+  if (res.recentList.isNotEmpty) {
+    return [for (final item in res.recentList) item.toBoardItem()];
+  }
+
   final items = <HeadTeacherBoardItem>[];
   if (res.chatWaitingCount > 0) {
     items.add(
@@ -166,7 +209,7 @@ List<HeadTeacherBoardItem> buildHeadTeacherRecentBoardItems(
   if (res.classList.isNotEmpty) {
     items.add(
       HeadTeacherBoardItem(
-        time: '管辖 ${res.classList.length} 班',
+        time: '我管理的班级',
         title: res.classNamesLabel,
         tag: '班级',
       ),
@@ -204,7 +247,18 @@ HeadTeacherIndexRes parseHeadTeacherIndexRes(dynamic raw) {
     pendingLeaveCount: _asInt(m['pendingLeaveCount']) ?? 0,
     pendingMakeupCount: _asInt(m['pendingMakeupCount']) ?? 0,
     todayAbnormalDormCount: _asInt(m['todayAbnormalDormCount']) ?? 0,
+    todoList: _parseFeedList(m['todoList']),
+    recentList: _parseFeedList(m['recentList']),
   );
+}
+
+List<HeadTeacherFeedItem> _parseFeedList(dynamic raw) {
+  if (raw is! List) return const [];
+  return raw
+      .whereType<Map>()
+      .map((e) => HeadTeacherFeedItem.fromJson(Map<String, dynamic>.from(e)))
+      .where((item) => item.title.isNotEmpty || item.desc.isNotEmpty)
+      .toList();
 }
 
 int? _asInt(dynamic raw) {

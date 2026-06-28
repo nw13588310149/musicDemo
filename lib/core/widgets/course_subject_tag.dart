@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 import '../../features/shell/ui/shell_layout.dart';
 import 'course_inline_tag_style.dart';
@@ -8,7 +7,7 @@ import 'course_inline_tag_style.dart';
 /// • 视唱/听音/乐理/钢琴等理论与基础类 → 紫（#EAE5FF / #8741FF）
 /// • 笛/箫/笙/胡/筝/吉他等器乐类       → 绿（#DFFCF0 / #0CAC40）
 ///
-/// 尺寸与首页右侧课程卡一致；在 [DashboardScaleScope] 下按 ui 缩放。
+/// 盒模型与 [CourseClassKindTag] 一致；在 [DashboardScaleScope] 下按 ui 缩放。
 class CourseSubjectTag extends StatelessWidget {
   const CourseSubjectTag({super.key, required this.name, this.muted = false});
 
@@ -57,25 +56,15 @@ class CourseSubjectTag extends StatelessWidget {
         ? const Color(0xFFB6B5BB)
         : (isInstrument ? const Color(0xFF0CAC40) : const Color(0xFF8741FF));
 
-    return Container(
-      height: ui(CourseInlineTagStyle.height),
-      padding: EdgeInsets.symmetric(horizontal: ui(4)),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(ui(CourseInlineTagStyle.borderRadius)),
-      ),
+    return CourseInlineTagStyle.build(
+      ui: ui,
+      backgroundColor: bg,
+      outlined: false,
       child: Text(
         name,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: ui(12),
-          color: fg,
-          fontFamily: 'PingFang SC',
-          fontWeight: AppFont.w400,
-          height: 15.24 / 12,
-        ),
+        style: CourseInlineTagStyle.textStyle(ui: ui, color: fg),
       ),
     );
   }

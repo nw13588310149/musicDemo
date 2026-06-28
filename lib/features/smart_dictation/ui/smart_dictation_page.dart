@@ -2103,7 +2103,7 @@ class _ResultStatCard extends StatelessWidget {
         width: ui(102),
         height: ui(71),
         child: Stack(
-          clipBehavior: Clip.hardEdge,
+          clipBehavior: Clip.none,
           children: [
             Positioned(
               left: ui(6),
@@ -2125,9 +2125,9 @@ class _ResultStatCard extends StatelessWidget {
               ),
             ),
             Positioned(
-              left: ui(27),
-              top: ui(6),
-              right: ui(6),
+              left: ui(6),
+              top: ui(0),
+              width: ui(91),
               child: Text(
                 title,
                 textAlign: TextAlign.center,

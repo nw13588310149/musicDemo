@@ -134,6 +134,19 @@ const int _kChatPageSize = 20;
 /// 量提前发起请求避免硬卡顿。
 const double _kLoadOlderTriggerPx = 120;
 
+Widget _wrapGroupChatDismissTap({
+  required bool enabled,
+  required VoidCallback onDismiss,
+  required Widget child,
+}) {
+  if (!enabled) return child;
+  return GestureDetector(
+    behavior: HitTestBehavior.translucent,
+    onTap: onDismiss,
+    child: child,
+  );
+}
+
 class _GroupChatViewState extends ConsumerState<GroupChatView>
     with WidgetsBindingObserver {
   // —— 会话 ——————————————————————————————————————————————————————
@@ -214,6 +227,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
   // _recordSeconds：当前录音时长秒数（每秒 +1）。
   // _liveWaveform：录音时滚动更新的波形采样（来自真实麦克风振幅）。
   bool _voiceMode = false;
+  bool _showEmoji = false;
   bool _recording = false;
   bool _willCancel = false;
   int _recordSeconds = 0;
@@ -750,6 +764,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
     setState(() {
       _selectedConvId = id;
       _playingVoiceId = null;
+      _showEmoji = false;
       _abortRecording();
       // 进入会话即清零未读计数，与 IM 通用交互一致。
       final list = _conversations;
@@ -1483,9 +1498,31 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
 
   /// 输入栏 mic icon 点击 → 切到语音输入模式（大"按住说话"按钮）；
   /// 已在语音模式时 mic icon / keyboard icon 复用此函数切回文本输入。
+  void _setShowEmoji(bool value) {
+    if (_showEmoji == value) return;
+    setState(() => _showEmoji = value);
+  }
+
+  void _toggleShowEmoji() => _setShowEmoji(!_showEmoji);
+
+  bool get _shouldDismissInputOnBlankTap =>
+      _showEmoji || (_voiceMode && !_recording);
+
+  /// 点击输入栏 / 表情面板以外的区域：收起表情 / 退出语音输入，回到正常文本输入。
+  void _dismissSpecialInputModes() {
+    if (_showEmoji) _setShowEmoji(false);
+    if (_voiceMode && !_recording) {
+      setState(() {
+        _voiceMode = false;
+        _abortRecording();
+      });
+    }
+  }
+
   void _toggleVoiceMode() {
     setState(() {
       _voiceMode = !_voiceMode;
+      if (_voiceMode) _showEmoji = false;
       // 切换出语音模式时，若有未发送的录音直接丢弃。
       if (!_voiceMode) _abortRecording();
     });
@@ -1822,6 +1859,11 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
           onRecordPressMove: _onRecordPressMove,
           onRecordPressEnd: _onRecordPressEnd,
           onShowDetail: _openGroupDetailDrawer,
+          showEmoji: _showEmoji,
+          onToggleShowEmoji: _toggleShowEmoji,
+          onSetShowEmoji: _setShowEmoji,
+          shouldDismissInputOnBlankTap: _shouldDismissInputOnBlankTap,
+          onDismissInputModes: _dismissSpecialInputModes,
         ),
     );
   }
@@ -1926,6 +1968,11 @@ class _ChatLayout extends StatelessWidget {
     required this.onRecordPressMove,
     required this.onRecordPressEnd,
     required this.onShowDetail,
+    required this.showEmoji,
+    required this.onToggleShowEmoji,
+    required this.onSetShowEmoji,
+    required this.shouldDismissInputOnBlankTap,
+    required this.onDismissInputModes,
   });
 
   final List<_Conversation> conversations;
@@ -1978,6 +2025,11 @@ class _ChatLayout extends StatelessWidget {
   final ValueChanged<double> onRecordPressMove;
   final VoidCallback onRecordPressEnd;
   final VoidCallback onShowDetail;
+  final bool showEmoji;
+  final VoidCallback onToggleShowEmoji;
+  final ValueChanged<bool> onSetShowEmoji;
+  final bool shouldDismissInputOnBlankTap;
+  final VoidCallback onDismissInputModes;
 
   @override
   Widget build(BuildContext context) {
@@ -1994,10 +2046,72 @@ class _ChatLayout extends StatelessWidget {
                 selectedConvId: selectedConvId,
                 onSelect: onSelectConv,
                 onBack: onBack,
+                dismissTapEnabled: shouldDismissInputOnBlankTap,
+                onDismissTap: onDismissInputModes,
               ),
               SizedBox(height: ui(8)),
               Expanded(
                 child: _ChatRightPane(
+                    conv: currentConv,
+                    hasSelection: hasSelection,
+                    memberCount: memberCount,
+                    announcement: announcement,
+                    announcementUpdatedAt: announcementUpdatedAt,
+                    canEditAnnouncement: canEditAnnouncement,
+                    onEditAnnouncement: onEditAnnouncement,
+                    onRecallMessage: onRecallMessage,
+                    messages: messages,
+                    loadingMessages: loadingMessages,
+                    loadingOlder: loadingOlder,
+                    hasMoreOlder: hasMoreOlder,
+                    messagesController: messagesController,
+                    currentUserId: currentUserId,
+                    playingVoiceId: playingVoiceId,
+                    playingFraction: playingFraction,
+                    onToggleVoice: onToggleVoice,
+                    inputController: inputController,
+                    onSend: onSend,
+                    muted: muted,
+                    pinned: pinned,
+                    onToggleMute: onToggleMute,
+                    onTogglePin: onTogglePin,
+                    onUploadImage: onUploadImage,
+                    outerCornerLeft: true,
+                    voiceMode: voiceMode,
+                    recording: recording,
+                    willCancel: willCancel,
+                    liveWaveform: liveWaveform,
+                    onToggleVoiceMode: onToggleVoiceMode,
+                    onRecordPressStart: onRecordPressStart,
+                    onRecordPressMove: onRecordPressMove,
+                    onRecordPressEnd: onRecordPressEnd,
+                    onShowDetail: onShowDetail,
+                    showEmoji: showEmoji,
+                    onToggleShowEmoji: onToggleShowEmoji,
+                    onSetShowEmoji: onSetShowEmoji,
+                    dismissTapEnabled: shouldDismissInputOnBlankTap,
+                    onDismissTap: onDismissInputModes,
+                  ),
+                ),
+              ],
+            );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              width: ui(230),
+              child: _ConversationListPane(
+                conversations: conversations,
+                selectedConvId: selectedConvId,
+                onSelect: onSelectConv,
+                onBack: onBack,
+                dismissTapEnabled: shouldDismissInputOnBlankTap,
+                onDismissTap: onDismissInputModes,
+              ),
+            ),
+            Expanded(
+              child: _ChatRightPane(
                   conv: currentConv,
                   hasSelection: hasSelection,
                   memberCount: memberCount,
@@ -2022,7 +2136,6 @@ class _ChatLayout extends StatelessWidget {
                   onToggleMute: onToggleMute,
                   onTogglePin: onTogglePin,
                   onUploadImage: onUploadImage,
-                  outerCornerLeft: true,
                   voiceMode: voiceMode,
                   recording: recording,
                   willCancel: willCancel,
@@ -2032,62 +2145,15 @@ class _ChatLayout extends StatelessWidget {
                   onRecordPressMove: onRecordPressMove,
                   onRecordPressEnd: onRecordPressEnd,
                   onShowDetail: onShowDetail,
+                  showEmoji: showEmoji,
+                  onToggleShowEmoji: onToggleShowEmoji,
+                  onSetShowEmoji: onSetShowEmoji,
+                  dismissTapEnabled: shouldDismissInputOnBlankTap,
+                  onDismissTap: onDismissInputModes,
                 ),
               ),
             ],
           );
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(
-              width: ui(230),
-              child: _ConversationListPane(
-                conversations: conversations,
-                selectedConvId: selectedConvId,
-                onSelect: onSelectConv,
-                onBack: onBack,
-              ),
-            ),
-            Expanded(
-              child: _ChatRightPane(
-                conv: currentConv,
-                hasSelection: hasSelection,
-                memberCount: memberCount,
-                announcement: announcement,
-                announcementUpdatedAt: announcementUpdatedAt,
-                canEditAnnouncement: canEditAnnouncement,
-                onEditAnnouncement: onEditAnnouncement,
-                onRecallMessage: onRecallMessage,
-                messages: messages,
-                loadingMessages: loadingMessages,
-                loadingOlder: loadingOlder,
-                hasMoreOlder: hasMoreOlder,
-                messagesController: messagesController,
-                currentUserId: currentUserId,
-                playingVoiceId: playingVoiceId,
-                playingFraction: playingFraction,
-                onToggleVoice: onToggleVoice,
-                inputController: inputController,
-                onSend: onSend,
-                muted: muted,
-                pinned: pinned,
-                onToggleMute: onToggleMute,
-                onTogglePin: onTogglePin,
-                onUploadImage: onUploadImage,
-                voiceMode: voiceMode,
-                recording: recording,
-                willCancel: willCancel,
-                liveWaveform: liveWaveform,
-                onToggleVoiceMode: onToggleVoiceMode,
-                onRecordPressStart: onRecordPressStart,
-                onRecordPressMove: onRecordPressMove,
-                onRecordPressEnd: onRecordPressEnd,
-                onShowDetail: onShowDetail,
-              ),
-            ),
-          ],
-        );
       },
     );
   }
@@ -3052,12 +3118,16 @@ class _ConversationListPane extends StatefulWidget {
     required this.selectedConvId,
     required this.onSelect,
     required this.onBack,
+    this.dismissTapEnabled = false,
+    this.onDismissTap,
   });
 
   final List<_Conversation> conversations;
   final String selectedConvId;
   final ValueChanged<String> onSelect;
   final VoidCallback onBack;
+  final bool dismissTapEnabled;
+  final VoidCallback? onDismissTap;
 
   @override
   State<_ConversationListPane> createState() => _ConversationListPaneState();
@@ -3082,67 +3152,71 @@ class _ConversationListPaneState extends State<_ConversationListPane> {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final filtered = _filteredConversations;
-    return Container(
-      decoration: BoxDecoration(
-        color: _kCardBg,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(ui(16)),
-          bottomLeft: Radius.circular(ui(16)),
+    return _wrapGroupChatDismissTap(
+      enabled: widget.dismissTapEnabled,
+      onDismiss: widget.onDismissTap ?? () {},
+      child: Container(
+        decoration: BoxDecoration(
+          color: _kCardBg,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(ui(16)),
+            bottomLeft: Radius.circular(ui(16)),
+          ),
+          border: Border(right: BorderSide(color: _kBorderSoft)),
         ),
-        border: Border(right: BorderSide(color: _kBorderSoft)),
-      ),
-      padding: EdgeInsets.fromLTRB(ui(8), 0, ui(8), ui(8)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            height: ui(68),
-            child: Align(
-              alignment: Alignment.topLeft,
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(ui(4), ui(12), 0, 0),
-                child: _GroupChatBackButton(onTap: widget.onBack),
+        padding: EdgeInsets.fromLTRB(ui(8), 0, ui(8), ui(8)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              height: ui(68),
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(ui(4), ui(12), 0, 0),
+                  child: _GroupChatBackButton(onTap: widget.onBack),
+                ),
               ),
             ),
-          ),
-          _ConvSearchField(
-            controller: _searchCtrl,
-            onChanged: (_) => setState(() {}),
-          ),
-          SizedBox(height: ui(12)),
-          Expanded(
-            child: widget.conversations.isEmpty
-                ? const _EmptyConversationsHint()
-                : filtered.isEmpty
-                ? const _ConversationSearchEmptyHint()
-                : ListView.separated(
-                    padding: EdgeInsets.zero,
-                    itemCount: filtered.length,
-                    separatorBuilder: (context, index) {
-                      final selectedIndex = filtered.indexWhere(
-                        (c) => c.id == widget.selectedConvId,
-                      );
-                      final hideDivider =
-                          selectedIndex != -1 &&
-                          (index == selectedIndex - 1 ||
-                              index == selectedIndex);
-                      return Divider(
-                        height: 1,
-                        thickness: 0.5,
-                        color: hideDivider ? Colors.transparent : _kBorderSoft,
-                      );
-                    },
-                    itemBuilder: (context, i) {
-                      final c = filtered[i];
-                      return _ConversationCell(
-                        conv: c,
-                        active: c.id == widget.selectedConvId,
-                        onTap: () => widget.onSelect(c.id),
-                      );
-                    },
-                  ),
-          ),
-        ],
+            _ConvSearchField(
+              controller: _searchCtrl,
+              onChanged: (_) => setState(() {}),
+            ),
+            SizedBox(height: ui(12)),
+            Expanded(
+              child: widget.conversations.isEmpty
+                  ? const _EmptyConversationsHint()
+                  : filtered.isEmpty
+                  ? const _ConversationSearchEmptyHint()
+                  : ListView.separated(
+                      padding: EdgeInsets.zero,
+                      itemCount: filtered.length,
+                      separatorBuilder: (context, index) {
+                        final selectedIndex = filtered.indexWhere(
+                          (c) => c.id == widget.selectedConvId,
+                        );
+                        final hideDivider =
+                            selectedIndex != -1 &&
+                            (index == selectedIndex - 1 ||
+                                index == selectedIndex);
+                        return Divider(
+                          height: 1,
+                          thickness: 0.5,
+                          color: hideDivider ? Colors.transparent : _kBorderSoft,
+                        );
+                      },
+                      itemBuilder: (context, i) {
+                        final c = filtered[i];
+                        return _ConversationCell(
+                          conv: c,
+                          active: c.id == widget.selectedConvId,
+                          onTap: () => widget.onSelect(c.id),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -3355,19 +3429,26 @@ class _CompactConversationStrip extends StatelessWidget {
     required this.selectedConvId,
     required this.onSelect,
     required this.onBack,
+    this.dismissTapEnabled = false,
+    this.onDismissTap,
   });
 
   final List<_Conversation> conversations;
   final String selectedConvId;
   final ValueChanged<String> onSelect;
   final VoidCallback onBack;
+  final bool dismissTapEnabled;
+  final VoidCallback? onDismissTap;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(8), 0),
-      child: Row(
+    return _wrapGroupChatDismissTap(
+      enabled: dismissTapEnabled,
+      onDismiss: onDismissTap ?? () {},
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(8), 0),
+        child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _GroupChatBackButton(onTap: onBack),
@@ -3420,6 +3501,7 @@ class _CompactConversationStrip extends StatelessWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -3464,6 +3546,11 @@ class _ChatRightPane extends StatefulWidget {
     required this.onRecordPressMove,
     required this.onRecordPressEnd,
     required this.onShowDetail,
+    required this.showEmoji,
+    required this.onToggleShowEmoji,
+    required this.onSetShowEmoji,
+    this.dismissTapEnabled = false,
+    this.onDismissTap,
     this.outerCornerLeft = false,
   });
 
@@ -3510,25 +3597,17 @@ class _ChatRightPane extends StatefulWidget {
   final ValueChanged<double> onRecordPressMove;
   final VoidCallback onRecordPressEnd;
   final VoidCallback onShowDetail;
+  final bool showEmoji;
+  final VoidCallback onToggleShowEmoji;
+  final ValueChanged<bool> onSetShowEmoji;
+  final bool dismissTapEnabled;
+  final VoidCallback? onDismissTap;
 
   @override
   State<_ChatRightPane> createState() => _ChatRightPaneState();
 }
 
 class _ChatRightPaneState extends State<_ChatRightPane> {
-  /// 表情面板开关。状态托管在 RightPane 这一层（而不是输入栏内部），
-  /// 是为了把表情面板作为一个 `Positioned` 浮层，渲染到聊天主区
-  /// （灰底圆角板）的 `Stack` 里 —— 视觉上**悬浮**在消息流上方，不再
-  /// 在 Column 里挤压消息区高度（与微信桌面端 / 钉钉一致）。
-  bool _showEmoji = false;
-
-  void _setEmoji(bool value) {
-    if (_showEmoji == value) return;
-    setState(() => _showEmoji = value);
-  }
-
-  void _toggleEmoji() => _setEmoji(!_showEmoji);
-
   /// 在输入框光标处插入 emoji；如有选中区，则替换并把光标移到 emoji 之后。
   void _insertEmoji(String emoji) {
     final controller = widget.inputController;
@@ -3579,31 +3658,45 @@ class _ChatRightPaneState extends State<_ChatRightPane> {
   }
 
   void _onSend() {
-    if (_showEmoji) _setEmoji(false);
+    if (widget.showEmoji) widget.onSetShowEmoji(false);
     widget.onSend();
   }
 
   void _onTapMic() {
-    if (_showEmoji) _setEmoji(false);
+    if (widget.showEmoji) widget.onSetShowEmoji(false);
     widget.onToggleVoiceMode();
   }
 
   void _onInputFocus() {
-    if (_showEmoji) _setEmoji(false);
-  }
-
-  @override
-  void didUpdateWidget(covariant _ChatRightPane old) {
-    super.didUpdateWidget(old);
-    // 切换会话 / 进入语音模式时收起表情面板，避免错位。
-    if (_showEmoji && widget.voiceMode) {
-      _setEmoji(false);
-    }
+    if (widget.showEmoji) widget.onSetShowEmoji(false);
   }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final onDismiss = widget.onDismissTap ?? () {};
+    final chatBody = _wrapGroupChatDismissTap(
+      enabled: widget.dismissTapEnabled,
+      onDismiss: onDismiss,
+      child: _ChatBodyBoard(
+        messages: widget.messages,
+        loading: widget.loadingMessages,
+        loadingOlder: widget.loadingOlder,
+        hasMoreOlder: widget.hasMoreOlder,
+        scrollController: widget.messagesController,
+        hasSelection: widget.hasSelection,
+        announcement: widget.announcement,
+        announcementUpdatedAt: widget.announcementUpdatedAt,
+        canEditAnnouncement: widget.canEditAnnouncement,
+        onEditAnnouncement: widget.onEditAnnouncement,
+        onRecallMessage: widget.onRecallMessage,
+        currentUserId: widget.currentUserId,
+        playingVoiceId: widget.playingVoiceId,
+        playingFraction: widget.playingFraction,
+        onToggleVoice: widget.onToggleVoice,
+        groupChatClassId: widget.conv.id,
+      ),
+    );
     final bottomBar = widget.voiceMode
         ? _VoiceHoldBar(
             recording: widget.recording,
@@ -3618,8 +3711,8 @@ class _ChatRightPaneState extends State<_ChatRightPane> {
             onSend: _onSend,
             onTapMic: _onTapMic,
             onUpload: widget.onUploadImage,
-            emojiActive: _showEmoji,
-            onToggleEmoji: _toggleEmoji,
+            emojiActive: widget.showEmoji,
+            onToggleEmoji: widget.onToggleShowEmoji,
             onInputFocus: _onInputFocus,
           );
     return Container(
@@ -3634,39 +3727,24 @@ class _ChatRightPaneState extends State<_ChatRightPane> {
       ),
       child: Column(
         children: [
-          _ChatHeaderBar(
-            title: widget.conv.name,
-            memberCount: widget.memberCount,
-            muted: widget.muted,
-            pinned: widget.pinned,
-            onToggleMute: widget.onToggleMute,
-            onTogglePin: widget.onTogglePin,
-            onShowDetail: widget.onShowDetail,
+          _wrapGroupChatDismissTap(
+            enabled: widget.dismissTapEnabled,
+            onDismiss: onDismiss,
+            child: _ChatHeaderBar(
+              title: widget.conv.name,
+              memberCount: widget.memberCount,
+              muted: widget.muted,
+              pinned: widget.pinned,
+              onToggleMute: widget.onToggleMute,
+              onTogglePin: widget.onTogglePin,
+              onShowDetail: widget.onShowDetail,
+            ),
           ),
           Expanded(
             // 用 Stack 让录音浮窗 / 表情面板悬浮在消息区底部，不挤压消息布局。
             child: Stack(
               children: [
-                Positioned.fill(
-                  child: _ChatBodyBoard(
-                    messages: widget.messages,
-                    loading: widget.loadingMessages,
-                    loadingOlder: widget.loadingOlder,
-                    hasMoreOlder: widget.hasMoreOlder,
-                    scrollController: widget.messagesController,
-                    hasSelection: widget.hasSelection,
-                    announcement: widget.announcement,
-                    announcementUpdatedAt: widget.announcementUpdatedAt,
-                    canEditAnnouncement: widget.canEditAnnouncement,
-                    onEditAnnouncement: widget.onEditAnnouncement,
-                    onRecallMessage: widget.onRecallMessage,
-                    currentUserId: widget.currentUserId,
-                    playingVoiceId: widget.playingVoiceId,
-                    playingFraction: widget.playingFraction,
-                    onToggleVoice: widget.onToggleVoice,
-                    groupChatClassId: widget.conv.id,
-                  ),
-                ),
+                Positioned.fill(child: chatBody),
                 if (widget.recording)
                   Positioned(
                     left: 0,
@@ -3679,7 +3757,7 @@ class _ChatRightPaneState extends State<_ChatRightPane> {
                       ),
                     ),
                   ),
-                if (_showEmoji)
+                if (widget.showEmoji)
                   Positioned(
                     left: ui(16),
                     right: ui(16),
@@ -5440,7 +5518,7 @@ class _SendButton extends StatelessWidget {
 // 表情面板（emoji picker）
 // =============================================================================
 //
-// 显示位置：输入栏正上方，由 `_ChatInputBarState` 通过 `_showEmoji` 切换。
+// 显示位置：输入栏正上方，由页面级 `showEmoji` 切换。
 // 顶部高 240，9 列 4 行可见 emoji，整列竖向滚动；底部 40px 是 6 个分类
 // tab + 退格按钮。点击 emoji 调 [onPick] 把对应 unicode 字符插入输入框
 // 光标处；点击退格调 [onBackspace]，按字符簇（grapheme）删一个，
