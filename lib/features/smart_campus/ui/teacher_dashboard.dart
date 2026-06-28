@@ -29,7 +29,6 @@ import 'widgets/smart_campus_home_card.dart';
 import 'widgets/smart_campus_quick_action_icon.dart';
 import 'widgets/smart_campus_quick_actions_card.dart';
 import 'widgets/smart_campus_stat_card.dart';
-import 'widgets/teacher_today_course_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 part 'student_dashboard.dart';
@@ -2063,7 +2062,7 @@ class _TeacherNoticeCard extends StatelessWidget {
 //   - 顶部 ui(12) 间距 + 标题→白卡 ui(20)
 //   - 数据来自 `/app/school/v2/teacher/courseList`（当日）+ `schoolTimeConfigList`（节次时间）
 //   - 白卡 padding 12 / radius 16 / 浅阴影
-//   - 白卡内部子卡与签课管理「今日课程」一致：104 高 / radius 12 / 右上 68×22 状态角标
+//   - 白卡内部子卡与首页课程卡一致：复用 [DashboardCourseNoticeCard]（104 高 / radius 12 / 右上 60×22 状态角标；已结束标签灰度）
 //   - 时段 Barlow 18；头像 40 + 姓名 + 科目标签 + 大小课标签；副行提示文案
 //   - 数据为空时白卡保留，并展示占位文案
 // =============================================================================
@@ -2130,10 +2129,10 @@ class _LessonScheduleData {
 
   bool get isPast => phase == _LessonSlotPhase.ended;
 
-  TeacherTodayCourseRunState get runState => switch (phase) {
-    _LessonSlotPhase.ended => TeacherTodayCourseRunState.ended,
-    _LessonSlotPhase.inProgress => TeacherTodayCourseRunState.inProgress,
-    _LessonSlotPhase.upcoming => TeacherTodayCourseRunState.upcoming,
+  DashboardCourseRunState get runState => switch (phase) {
+    _LessonSlotPhase.ended => DashboardCourseRunState.ended,
+    _LessonSlotPhase.inProgress => DashboardCourseRunState.inProgress,
+    _LessonSlotPhase.upcoming => DashboardCourseRunState.upcoming,
   };
 }
 
@@ -2720,13 +2719,11 @@ class _CurrentLessonPanel extends StatelessWidget {
     this.lesson,
     this.fillHeight = false,
     this.onOpenSchedule,
-    this.tagsBesideTime = false,
   });
 
   final _LessonScheduleData? lesson;
   final bool fillHeight;
   final void Function({TeacherScheduleFocusTarget? focus})? onOpenSchedule;
-  final bool tagsBesideTime;
 
   @override
   Widget build(BuildContext context) {
@@ -2753,7 +2750,6 @@ class _CurrentLessonPanel extends StatelessWidget {
               )
             : _TappableLessonCard(
                 data: lesson!,
-                tagsBesideTime: tagsBesideTime,
                 onTap: onTap,
               ),
       ),
@@ -2767,13 +2763,11 @@ class _TodaySchedulePanel extends StatelessWidget {
     required this.lessons,
     this.fillHeight = false,
     this.onOpenSchedule,
-    this.tagsBesideTime = false,
   });
 
   final List<_LessonScheduleData> lessons;
   final bool fillHeight;
   final void Function({TeacherScheduleFocusTarget? focus})? onOpenSchedule;
-  final bool tagsBesideTime;
 
   @override
   Widget build(BuildContext context) {
@@ -2802,7 +2796,6 @@ class _TodaySchedulePanel extends StatelessWidget {
                     if (i > 0) SizedBox(height: ui(8)),
                     _TappableLessonCard(
                       data: lessons[i],
-                      tagsBesideTime: tagsBesideTime,
                       onTap: onOpenSchedule == null
                           ? null
                           : () {
@@ -2826,20 +2819,15 @@ class _TodaySchedulePanel extends StatelessWidget {
 class _TappableLessonCard extends StatelessWidget {
   const _TappableLessonCard({
     required this.data,
-    this.tagsBesideTime = false,
     this.onTap,
   });
 
   final _LessonScheduleData data;
-  final bool tagsBesideTime;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final card = _LessonScheduleCard(
-      data: data,
-      tagsBesideTime: tagsBesideTime,
-    );
+    final card = _LessonScheduleCard(data: data);
     if (onTap == null) return card;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -2906,61 +2894,29 @@ class _LessonEmptyHint extends StatelessWidget {
 double _lessonScheduleCardOuterHeight(double Function(double) ui) => ui(104);
 
 class _LessonScheduleCard extends StatelessWidget {
-  const _LessonScheduleCard({
-    required this.data,
-    this.tagsBesideTime = false,
-  });
+  const _LessonScheduleCard({required this.data});
 
   final _LessonScheduleData data;
-  final bool tagsBesideTime;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final row = data.teachers.first;
-    if (tagsBesideTime) {
-      return DashboardCourseNoticeCard(
-        startTime: data.startTime,
-        endTime: data.endTime,
-        subjectName: row.courseName,
-        isSmallCourse: row.isSmallCourse,
-        displayName: row.teacherName,
-        subtitle: row.hint,
-        runState: switch (data.runState) {
-          TeacherTodayCourseRunState.ended => DashboardCourseRunState.ended,
-          TeacherTodayCourseRunState.inProgress =>
-            DashboardCourseRunState.inProgress,
-          TeacherTodayCourseRunState.upcoming => DashboardCourseRunState.upcoming,
-        },
-        tagDotColor: data.isPast ? null : row.tagDotColor,
-        avatar: _LessonSeedAvatar(
-          seed: row.avatarSeed,
-          logoUrl: row.logoUrl,
-          avatarUrl: row.avatarUrl,
-          preferLogoOverAvatar: row.preferLogoOverAvatar,
-          size: ui(40),
-        ),
-      );
-    }
-    return TeacherTodayCourseCard(
+    return DashboardCourseNoticeCard(
       startTime: data.startTime,
       endTime: data.endTime,
-      runState: data.runState,
-      displayName: row.teacherName,
-      courseName: row.courseName,
+      subjectName: row.courseName,
       isSmallCourse: row.isSmallCourse,
+      displayName: row.teacherName,
       subtitle: row.hint,
-      muted: data.isPast,
+      runState: data.runState,
       tagDotColor: data.isPast ? null : row.tagDotColor,
-      avatar: Opacity(
-        opacity: data.isPast ? 0.72 : 1,
-        child: _LessonSeedAvatar(
-          seed: row.avatarSeed,
-          logoUrl: row.logoUrl,
-          avatarUrl: row.avatarUrl,
-          preferLogoOverAvatar: row.preferLogoOverAvatar,
-          size: ui(40),
-        ),
+      avatar: _LessonSeedAvatar(
+        seed: row.avatarSeed,
+        logoUrl: row.logoUrl,
+        avatarUrl: row.avatarUrl,
+        preferLogoOverAvatar: row.preferLogoOverAvatar,
+        size: ui(40),
       ),
     );
   }

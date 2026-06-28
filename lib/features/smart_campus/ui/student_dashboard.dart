@@ -385,14 +385,12 @@ class _StudentDashboardScheduleSectionState
       fillHeight: widget.fillRemaining,
       onOpenSchedule: ({TeacherScheduleFocusTarget? focus}) =>
           widget.onOpenCheckIn(),
-      tagsBesideTime: true,
     );
     final todayPanel = _TodaySchedulePanel(
       lessons: _todayLessons,
       fillHeight: widget.fillRemaining,
       onOpenSchedule: ({TeacherScheduleFocusTarget? focus}) =>
           widget.onOpenMySchedule(),
-      tagsBesideTime: true,
     );
 
     return LayoutBuilder(

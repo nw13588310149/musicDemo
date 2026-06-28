@@ -820,7 +820,11 @@ class TeacherRepository {
 
   // ============== 作业管理（任课老师端） ==============
 
-  /// 作业数据汇总。返回待批改人次、发布数、均分、最高/最低分等聚合指标。
+  /// 作业数据汇总。`data` 字段示例：
+  /// `homeworkCount` 发布作业数、`status1Count` 待批改人次、
+  /// `status2Count` 已评阅人次、`completeRate` 完成率、
+  /// `avgScore` / `maxScore` / `minScore` 已评分数统计，
+  /// `homeworkStatus0Count` / `homeworkStatus1Count` 进行中 / 已截止作业数。
   ///
   /// `beginDate` / `endDate` 格式 `yyyy-MM-dd`；`classId` 为 `"0"` 表示全部班级。
   /// 班级 id 须用 **字符串**（雪花 id），勿用 int 以免 Web/JSON 精度丢失。

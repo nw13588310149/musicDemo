@@ -74,6 +74,83 @@ List<AdminHomeNotice> parseAdminHomeNotices(dynamic raw) {
       .toList(growable: false);
 }
 
+/// 管理员首页「工作提醒」单条记录（`workReminders` 接口）。
+class AdminHomeWorkReminder {
+  const AdminHomeWorkReminder({
+    required this.tag,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final String tag;
+  final String title;
+  final String subtitle;
+
+  factory AdminHomeWorkReminder.fromJson(Map<String, dynamic> json) {
+    final tag = _pickString(json, const ['tag', 'type', 'label', 'badge'], '预警');
+    final title = _pickString(json, const [
+      'title',
+      'name',
+      'remindTitle',
+      'mainTitle',
+    ], '');
+    final subtitle = _pickString(json, const [
+      'subtitle',
+      'subTitle',
+      'content',
+      'description',
+      'remark',
+      'detail',
+    ], '');
+    return AdminHomeWorkReminder(
+      tag: tag.isEmpty ? '预警' : tag,
+      title: title,
+      subtitle: subtitle,
+    );
+  }
+}
+
+List<AdminHomeWorkReminder> parseAdminHomeWorkReminders(dynamic raw) {
+  return [
+    for (final row in _coerceWorkReminderRows(raw))
+      AdminHomeWorkReminder.fromJson(row),
+  ].where((item) => item.title.isNotEmpty).toList(growable: false);
+}
+
+List<Map<String, dynamic>> _coerceWorkReminderRows(dynamic raw) {
+  dynamic list = raw;
+  if (list is Map && list['data'] is List) {
+    list = list['data'];
+  } else if (list is Map) {
+    for (final key in const ['records', 'list', 'rows', 'items']) {
+      if (list[key] is List) {
+        list = list[key];
+        break;
+      }
+    }
+  }
+  if (list is! List) return const [];
+
+  return [
+    for (final item in list)
+      if (item is Map) Map<String, dynamic>.from(item),
+  ];
+}
+
+String _pickString(
+  Map<String, dynamic> json,
+  List<String> keys,
+  String fallback,
+) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value == null) continue;
+    final text = value.toString().trim();
+    if (text.isNotEmpty) return text;
+  }
+  return fallback;
+}
+
 /// 管理员首页「数据看板」近 7 日登录曲线。
 class AdminHomeLoginChart {
   const AdminHomeLoginChart({this.points = const []});

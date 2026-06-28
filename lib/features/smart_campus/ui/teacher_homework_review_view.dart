@@ -553,13 +553,33 @@ class _HomeworkStats {
   final num minScore;
 
   factory _HomeworkStats.fromMap(Map<dynamic, dynamic> m) {
+    int pickInt(List<String> keys) {
+      for (final k in keys) {
+        final v = m[k];
+        if (v is int) return v;
+        final parsed = int.tryParse(v?.toString() ?? '');
+        if (parsed != null) return parsed;
+      }
+      return 0;
+    }
+
+    num pickNum(List<String> keys) {
+      for (final k in keys) {
+        final v = m[k];
+        if (v is num) return v;
+        final parsed = num.tryParse(v?.toString() ?? '');
+        if (parsed != null) return parsed;
+      }
+      return 0;
+    }
+
     return _HomeworkStats(
-      pendingCount: int.tryParse(m['pendingCount']?.toString() ?? '') ?? 0,
-      publishCount: int.tryParse(m['publishCount']?.toString() ?? m['totalCount']?.toString() ?? '') ?? 0,
-      reviewedCount: int.tryParse(m['reviewedCount']?.toString() ?? '') ?? 0,
-      avgScore: num.tryParse(m['avgScore']?.toString() ?? '') ?? 0,
-      maxScore: num.tryParse(m['maxScore']?.toString() ?? '') ?? 0,
-      minScore: num.tryParse(m['minScore']?.toString() ?? '') ?? 0,
+      pendingCount: pickInt(['status1Count', 'pendingCount', 'waitReviewCount']),
+      publishCount: pickInt(['homeworkCount', 'publishCount', 'totalCount']),
+      reviewedCount: pickInt(['status2Count']),
+      avgScore: pickNum(['avgScore', 'averageScore', 'scoreAvg']),
+      maxScore: pickNum(['maxScore', 'highestScore']),
+      minScore: pickNum(['minScore', 'lowestScore']),
     );
   }
 }
@@ -782,6 +802,7 @@ class _TeacherHomeworkReviewViewState
 
     return SmartCampusSecondaryPageShell(
       backgroundColor: _kPageBg,
+      bodyTopClipRadius: 8,
       bodyScrollable: false,
       header: _ReviewBanner(
         onBack: widget.onBack,

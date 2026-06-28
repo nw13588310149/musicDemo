@@ -547,6 +547,17 @@ class _HomeworkBanner extends StatelessWidget {
 // 3 张统计卡
 // =============================================================================
 
+/// 作业页统计卡数值：Barlow 32 / w500（Figma 与成绩页排名卡一致）。
+TextStyle _homeworkStatValueTextStyle(double Function(double) ui) {
+  return TextStyle(
+    fontSize: ui(32),
+    color: const Color(0xFF0B081A),
+    fontFamily: smartCampusStatValueFontFamily,
+    fontWeight: FontWeight.w500,
+    height: 1,
+  );
+}
+
 class _OverviewStatsRow extends StatelessWidget {
   const _OverviewStatsRow({required this.summary});
 
@@ -601,50 +612,33 @@ class _AverageScoreCard extends StatelessWidget {
         : '—';
     return SmartCampusStatCard.custom(
       backgroundAsset: AppAssets.studentHomeworkStatCard1,
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(16), ui(12)),
-        child: Stack(
-          children: [
-            Positioned(
-              left: 0,
-              top: 0,
-              child: Text(
-                '作业均分',
-                style: TextStyle(
-                  fontSize: ui(14),
-                  color: Colors.black,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w500,
-                  height: 1,
-                ),
+      contentPadding: EdgeInsets.zero,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: ui(16),
+            top: ui(16),
+            child: Text(
+              '作业均分',
+              style: TextStyle(
+                fontSize: ui(14),
+                color: Colors.black,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
+                height: 1,
               ),
             ),
-            Positioned(
-              left: 0,
-              top: ui(28),
-              child: Text(
-                valueLabel,
-                style: smartCampusStatValueTextStyle(ui),
-              ),
+          ),
+          Positioned(
+            left: ui(16),
+            top: ui(44),
+            child: Text(
+              valueLabel,
+              style: _homeworkStatValueTextStyle(ui),
             ),
-            Positioned(
-              left: ui(70),
-              top: ui(36),
-              right: 0,
-              child: Text(
-                '各科作业平均得分',
-                textAlign: TextAlign.right,
-                style: TextStyle(
-                  fontSize: ui(11),
-                  color: _kTextDivider,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 1,
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -671,7 +665,9 @@ class _HomeworkCountCard extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return SmartCampusStatCard.custom(
       backgroundAsset: backgroundAsset,
+      contentPadding: EdgeInsets.zero,
       child: Stack(
+        clipBehavior: Clip.none,
         children: [
           Positioned(
             left: ui(16),
@@ -692,7 +688,7 @@ class _HomeworkCountCard extends StatelessWidget {
             top: ui(44),
             child: Text(
               value,
-              style: smartCampusStatValueTextStyle(ui),
+              style: _homeworkStatValueTextStyle(ui),
             ),
           ),
           Positioned(

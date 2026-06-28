@@ -32,6 +32,7 @@ class AdminHomeController extends StateNotifier<AdminHomeState> {
       summaryError: '',
       loginChartError: '',
       noticeError: '',
+      workRemindersError: '',
     );
     final loginChartRange = adminHomeLast7DaysDateRange();
     final responses = await Future.wait([
@@ -41,10 +42,12 @@ class AdminHomeController extends StateNotifier<AdminHomeState> {
         endDate: loginChartRange.endDate,
       ),
       _repository.noticeManageList(current: 1, size: 20, status: 1),
+      _repository.workReminders(),
     ]);
     final summaryResponse = responses[0];
     final loginChartResponse = responses[1];
     final noticeResponse = responses[2];
+    final workRemindersResponse = responses[3];
     state = state.copyWith(
       loading: false,
       summary: summaryResponse.isSuccess
@@ -60,11 +63,17 @@ class AdminHomeController extends StateNotifier<AdminHomeState> {
       notices: noticeResponse.isSuccess
           ? parseAdminHomeNotices(noticeResponse.data)
           : state.notices,
+      workReminders: workRemindersResponse.isSuccess
+          ? parseAdminHomeWorkReminders(workRemindersResponse.data)
+          : state.workReminders,
       summaryError: summaryResponse.isSuccess ? '' : summaryResponse.displayMsg,
       loginChartError: loginChartResponse.isSuccess
           ? ''
           : loginChartResponse.displayMsg,
       noticeError: noticeResponse.isSuccess ? '' : noticeResponse.displayMsg,
+      workRemindersError: workRemindersResponse.isSuccess
+          ? ''
+          : workRemindersResponse.displayMsg,
     );
   }
 

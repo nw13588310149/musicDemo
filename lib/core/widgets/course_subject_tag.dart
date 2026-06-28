@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 import '../../features/shell/ui/shell_layout.dart';
+import 'course_inline_tag_style.dart';
 
 /// 课程科目标签 12px PingFang SC w400，按学科分类切换配色：
 /// • 视唱/听音/乐理/钢琴等理论与基础类 → 紫（#EAE5FF / #8741FF）
@@ -57,12 +58,12 @@ class CourseSubjectTag extends StatelessWidget {
         : (isInstrument ? const Color(0xFF0CAC40) : const Color(0xFF8741FF));
 
     return Container(
-      height: ui(17),
+      height: ui(CourseInlineTagStyle.height),
       padding: EdgeInsets.symmetric(horizontal: ui(4)),
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(ui(4)),
+        borderRadius: BorderRadius.circular(ui(CourseInlineTagStyle.borderRadius)),
       ),
       child: Text(
         name,

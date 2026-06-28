@@ -22,6 +22,7 @@ import '../../../core/providers/app_providers.dart';
 ///   - `schoolSmallCourseApplyList`  小班课申请列表
 ///   - `indexSum`                  管理员首页统计汇总
 ///   - `websocketLoginCount`       管理员首页数据看板（近 7 日在线登录）
+///   - `workReminders`             管理员首页工作提醒
 ///   - `studentList`               学生下拉列表
 ///   - `teacherList`               教师下拉列表
 ///
@@ -87,6 +88,22 @@ class AdminRepository {
         'endDate': endDate,
       },
     );
+  }
+
+  /// 管理员智慧校园首页工作提醒（`WorkRemindersRes`）。
+  ///
+  /// 返回 `data` 为提醒列表，每条常见字段：
+  /// ```json
+  /// [
+  ///   {
+  ///     "tag": "预警",
+  ///     "title": "高三音乐实验班·昨晚查寝1人未打卡未闭环",
+  ///     "subtitle": "宿管端已登记，待确认是否转晚归备案。"
+  ///   }
+  /// ]
+  /// ```
+  Future<ApiResponse> workReminders() {
+    return client.post('$_base/workReminders');
   }
 
   // ============== 下拉 / 列表 ==============

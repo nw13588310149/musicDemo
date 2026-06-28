@@ -5,37 +5,45 @@ class AdminHomeState {
     this.summary = const AdminHomeSummary(),
     this.loginChart = const AdminHomeLoginChart(),
     this.notices = const [],
+    this.workReminders = const [],
     this.loading = false,
     this.summaryError = '',
     this.loginChartError = '',
     this.noticeError = '',
+    this.workRemindersError = '',
   });
 
   final AdminHomeSummary summary;
   final AdminHomeLoginChart loginChart;
   final List<AdminHomeNotice> notices;
+  final List<AdminHomeWorkReminder> workReminders;
   final bool loading;
   final String summaryError;
   final String loginChartError;
   final String noticeError;
+  final String workRemindersError;
 
   AdminHomeState copyWith({
     AdminHomeSummary? summary,
     AdminHomeLoginChart? loginChart,
     List<AdminHomeNotice>? notices,
+    List<AdminHomeWorkReminder>? workReminders,
     bool? loading,
     String? summaryError,
     String? loginChartError,
     String? noticeError,
+    String? workRemindersError,
   }) {
     return AdminHomeState(
       summary: summary ?? this.summary,
       loginChart: loginChart ?? this.loginChart,
       notices: notices ?? this.notices,
+      workReminders: workReminders ?? this.workReminders,
       loading: loading ?? this.loading,
       summaryError: summaryError ?? this.summaryError,
       loginChartError: loginChartError ?? this.loginChartError,
       noticeError: noticeError ?? this.noticeError,
+      workRemindersError: workRemindersError ?? this.workRemindersError,
     );
   }
 }

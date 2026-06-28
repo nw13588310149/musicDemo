@@ -34,7 +34,7 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 ///    （5 刻度 100/95/90/85/80/0 + 横轴 周一-周日）。
 /// 4. **四端职能 + 工作提醒**：左右两白卡。
 ///    - 四端职能：4 tab（学生端/任课老师/班主任/宿管端）+ 滚动文案；
-///    - 工作提醒：3 条预警卡，红色「预警」徽章 + 标题 + 副标题 + 灰小点。
+///    - 工作提醒：3 条预警卡，红色「预警」徽章 + 标题 + 副标题。
 ///
 /// 整页主内容区统一滚动（左主栏 + 右栏同步），不再由中间左栏单独滚动。
 /// - 顶部 72 圆形头像 + 姓名 16/500 + 绿点「运行中」+ 黄底「管理员」徽章；
@@ -208,10 +208,17 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  _SectionTitle(title: '工作提醒'),
-                  SizedBox(height: 12),
-                  _WorkRemindersCard(),
+                children: [
+                  const _SectionTitle(title: '工作提醒'),
+                  SizedBox(height: ui(12)),
+                  _WorkRemindersCard(
+                    reminders: homeState.workReminders,
+                    loading: homeState.loading,
+                    error: homeState.workRemindersError,
+                    onRefresh: ref
+                        .read(adminHomeControllerProvider.notifier)
+                        .refresh,
+                  ),
                 ],
               ),
             ),
@@ -410,20 +417,7 @@ List<_QuickAction> _quickActionsForRole(SmartCampusRole role) {
   return _quickActions;
 }
 
-class _WorkReminder {
-  const _WorkReminder(this.title, this.subtitle);
-
-  final String title;
-  final String subtitle;
-}
-
 const _overviewTwinCardHeight = 243.0;
-
-const _workReminders = <_WorkReminder>[
-  _WorkReminder('高三音乐实验班·昨晚查寝1人未打卡未闭环', '宿管端已登记，待确认是否转晚归备案。'),
-  _WorkReminder('高二7班·本周作业批改完成度 78%', '尚有 3 名任课老师作业批改未提交，待跟进。'),
-  _WorkReminder('校园通知草稿超 7 日未发布', '通知管理后台累计 12 条草稿，请及时审核或归档。'),
-];
 
 const _fourEndsTabs = <String>['学生端', '任课老师', '班主任', '宿管端'];
 
@@ -1025,7 +1019,17 @@ class _FourEndTab extends StatelessWidget {
 // ============================================================================
 
 class _WorkRemindersCard extends StatelessWidget {
-  const _WorkRemindersCard();
+  const _WorkRemindersCard({
+    required this.reminders,
+    required this.loading,
+    required this.error,
+    required this.onRefresh,
+  });
+
+  final List<AdminHomeWorkReminder> reminders;
+  final bool loading;
+  final String error;
+  final VoidCallback onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -1033,16 +1037,57 @@ class _WorkRemindersCard extends StatelessWidget {
     return SmartCampusHomeCard(
       height: ui(_overviewTwinCardHeight),
       padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(12)),
-      child: Column(
-        children: [
-          for (var i = 0; i < _workReminders.length; i++) ...[
-            if (i > 0) SizedBox(height: ui(8)),
-            Expanded(
-              child: _WorkReminderCard(item: _workReminders[i]),
-            ),
-          ],
-        ],
-      ),
+      child: _buildBody(ui),
+    );
+  }
+
+  Widget _buildBody(double Function(double) ui) {
+    if (loading && reminders.isEmpty) {
+      return Center(
+        child: Text(
+          '加载中…',
+          style: TextStyle(
+            fontSize: ui(12),
+            height: 1.4,
+            color: const Color(0xFFB6B5BB),
+            fontFamily: 'PingFang SC',
+          ),
+        ),
+      );
+    }
+    if (error.isNotEmpty && reminders.isEmpty) {
+      return Center(
+        child: TextButton(
+          onPressed: onRefresh,
+          child: Text(
+            '工作提醒加载失败，点击重试',
+            style: TextStyle(fontSize: ui(12), fontFamily: 'PingFang SC'),
+          ),
+        ),
+      );
+    }
+    if (reminders.isEmpty) {
+      return Center(
+        child: Text(
+          '暂无工作提醒',
+          style: TextStyle(
+            fontSize: ui(12),
+            height: 1.4,
+            color: const Color(0xFFCECED1),
+            fontFamily: 'PingFang SC',
+          ),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: EdgeInsets.zero,
+      physics: const ClampingScrollPhysics(),
+      itemCount: reminders.length,
+      separatorBuilder: (context, index) => SizedBox(height: ui(8)),
+      itemBuilder: (context, index) =>
+          _WorkReminderCard(item: reminders[index]),
     );
   }
 }
@@ -1050,86 +1095,76 @@ class _WorkRemindersCard extends StatelessWidget {
 class _WorkReminderCard extends StatelessWidget {
   const _WorkReminderCard({required this.item});
 
-  final _WorkReminder item;
+  final AdminHomeWorkReminder item;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final subtitle = item.subtitle.trim();
     return Container(
       width: double.infinity,
-      height: double.infinity,
-      padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(20), ui(12)),
+      padding: EdgeInsets.all(ui(12)),
       decoration: BoxDecoration(
         color: const Color(0xFFF5F6FA),
         borderRadius: BorderRadius.circular(ui(8)),
       ),
-      child: Stack(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Column(
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: ui(6),
-                      vertical: ui(2),
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFE5E5),
-                      borderRadius: BorderRadius.circular(ui(4)),
-                    ),
-                    child: Text(
-                      '预警',
-                      style: TextStyle(
-                        fontSize: ui(10),
-                        height: 1.2,
-                        fontWeight: AppFont.w500,
-                        color: const Color(0xFFFF323C),
-                        fontFamily: 'PingFang SC',
-                      ),
-                    ),
+              Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: ui(6),
+                  vertical: ui(2),
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFE5E5),
+                  borderRadius: BorderRadius.circular(ui(4)),
+                ),
+                child: Text(
+                  item.tag,
+                  style: TextStyle(
+                    fontSize: ui(10),
+                    height: 1.2,
+                    fontWeight: AppFont.w500,
+                    color: const Color(0xFFFF323C),
+                    fontFamily: 'PingFang SC',
                   ),
-                  SizedBox(width: ui(6)),
-                  Expanded(
-                    child: Text(
-                      item.title,
-                      style: TextStyle(
-                        fontSize: ui(12),
-                        height: 1.4,
-                        color: const Color(0xFF0B081A),
-                        fontFamily: 'PingFang SC',
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
-              SizedBox(height: ui(6)),
-              Text(
-                item.subtitle,
-                style: TextStyle(
-                  fontSize: ui(12),
-                  height: 1.4,
-                  color: const Color(0xFFB6B5BB),
-                  fontFamily: 'PingFang SC',
+              SizedBox(width: ui(6)),
+              Expanded(
+                child: Text(
+                  item.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: ui(12),
+                    height: 1.4,
+                    color: const Color(0xFF0B081A),
+                    fontFamily: 'PingFang SC',
+                  ),
                 ),
               ),
             ],
           ),
-          Positioned(
-            right: 0,
-            top: 0,
-            child: Container(
-              width: ui(6),
-              height: ui(6),
-              decoration: const BoxDecoration(
-                color: Color(0xFFCECED1),
-                shape: BoxShape.circle,
+          if (subtitle.isNotEmpty) ...[
+            SizedBox(height: ui(6)),
+            Text(
+              subtitle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: ui(12),
+                height: 1.4,
+                color: const Color(0xFFB6B5BB),
+                fontFamily: 'PingFang SC',
               ),
             ),
-          ),
+          ],
         ],
       ),
     );

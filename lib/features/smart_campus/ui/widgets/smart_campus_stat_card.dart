@@ -94,12 +94,15 @@ Widget smartCampusHomeStatValue({
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        Text(
-          '天',
-          style: suffixStyle,
-          textHeightBehavior: textHeightBehavior,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+        Transform.translate(
+          offset: Offset(0, -ui(2)),
+          child: Text(
+            '天',
+            style: suffixStyle,
+            textHeightBehavior: textHeightBehavior,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );
@@ -181,14 +184,19 @@ class SmartCampusStatCard extends StatelessWidget {
     this.valueColor = const Color(0xFF0B081A),
     this.rightPadding = 56,
     this.onTap,
-  }) : child = null;
+  }) : child = null,
+       contentPadding = null;
 
   /// 自定义内容区（提供时忽略 [label]/[value] 默认排版）。
+  ///
+  /// [contentPadding] 为 `EdgeInsets.zero` 时，子组件按卡片边缘绝对定位（如 Figma
+  /// left/top 16/44）；默认保留统计卡通用内边距。
   const SmartCampusStatCard.custom({
     super.key,
     required this.backgroundAsset,
     required this.child,
     this.rightPadding = 56,
+    this.contentPadding,
     this.onTap,
   }) : label = '',
        value = 0,
@@ -205,6 +213,7 @@ class SmartCampusStatCard extends StatelessWidget {
   final bool valueIsText;
   final Color valueColor;
   final double rightPadding;
+  final EdgeInsets? contentPadding;
   final VoidCallback? onTap;
   final Widget? child;
 
@@ -246,12 +255,14 @@ class SmartCampusStatCard extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: EdgeInsets.fromLTRB(
-              ui(16),
-              ui(14),
-              ui(rightPadding),
-              ui(14),
-            ),
+            padding:
+                contentPadding ??
+                EdgeInsets.fromLTRB(
+                  ui(16),
+                  ui(14),
+                  ui(rightPadding),
+                  ui(14),
+                ),
             child: child ?? _DefaultStatContent(this, ui),
           ),
           Positioned.fill(

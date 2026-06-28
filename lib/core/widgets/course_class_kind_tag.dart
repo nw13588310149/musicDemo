@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 import '../../features/shell/ui/shell_layout.dart';
+import 'course_inline_tag_style.dart';
 
 /// 大课 / 小课标签：白底 + 圆点 + 文案，与智慧校园首页右侧课表一致。
 ///
@@ -41,12 +42,12 @@ class CourseClassKindTag extends StatelessWidget {
     final label = isSmall ? '小课' : '大课';
 
     return Container(
-      height: ui(19),
+      height: ui(CourseInlineTagStyle.height),
       padding: EdgeInsets.symmetric(horizontal: ui(4)),
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(4)),
+        borderRadius: BorderRadius.circular(ui(CourseInlineTagStyle.borderRadius)),
         border: outlined ? Border.all(color: _kBorderSoft) : null,
       ),
       child: Row(

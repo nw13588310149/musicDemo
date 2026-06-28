@@ -1277,12 +1277,6 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.inbox_outlined,
-            size: ui(40),
-            color: const Color(0xFFD4D6D9),
-          ),
-          SizedBox(height: ui(8)),
           Text(
             '当日暂无查寝记录',
             style: TextStyle(

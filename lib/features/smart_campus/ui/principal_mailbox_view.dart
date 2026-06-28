@@ -26,8 +26,10 @@
 // =============================================================================
 
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
@@ -284,7 +286,8 @@ class _PrincipalMailboxViewState extends ConsumerState<PrincipalMailboxView> {
 
   /// 点击上传卡片：
   /// - 若当前已有附件且处于失败态 → 重试；
-  /// - 否则唤起系统文件选择器（单文件，覆盖之前的附件）。
+  /// - 否则唤起系统选择器（单文件，覆盖之前的附件）。
+  ///   iOS / iPad 走 [CoursewarePickType.image] 直接进相册，避免 UIDocumentPicker。
   Future<void> _onUploadTap() async {
     final cur = _attachment;
     if (cur != null && cur.isUploading) return;
@@ -292,7 +295,13 @@ class _PrincipalMailboxViewState extends ConsumerState<PrincipalMailboxView> {
       _retryAttachment(cur);
       return;
     }
-    final files = await pickCoursewareFiles(allowMultiple: false);
+    final pickType = !kIsWeb && Platform.isIOS
+        ? CoursewarePickType.image
+        : CoursewarePickType.any;
+    final files = await pickCoursewareFiles(
+      allowMultiple: false,
+      type: pickType,
+    );
     if (files.isEmpty || !mounted) return;
     final f = files.first;
     final slot = _AttachmentSlot(
@@ -911,7 +920,7 @@ class _AttachmentSlot {
 
 /// 上传卡片。空状态显示「上传文件」；有附件后切换为「文件名 + 状态行」并在
 /// 右上角露出 × 移除按钮。点击行为：
-/// - 空：打开文件选择器
+/// - 空：iOS 打开相册，其它平台打开文件选择器
 /// - 失败：触发重试
 /// - 上传中：忽略
 /// - 已完成：再次选择则覆盖原附件

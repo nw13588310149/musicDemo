@@ -23,4 +23,37 @@ void main() {
     expect(chart.xLabels.first, '周五');
     expect(chart.xLabels.last, '周四');
   });
+
+  test('parseAdminHomeWorkReminders reads list and nested data', () {
+    final reminders = parseAdminHomeWorkReminders([
+      {
+        'tag': '预警',
+        'title': '高三音乐实验班·昨晚查寝1人未打卡未闭环',
+        'subtitle': '宿管端已登记，待确认是否转晚归备案。',
+      },
+      {
+        'type': '提醒',
+        'title': '校园通知草稿超 7 日未发布',
+        'content': '通知管理后台累计 12 条草稿，请及时审核或归档。',
+      },
+    ]);
+
+    expect(reminders, hasLength(2));
+    expect(reminders.first.tag, '预警');
+    expect(reminders.first.title, contains('查寝'));
+    expect(reminders.last.tag, '提醒');
+    expect(reminders.last.subtitle, contains('12 条草稿'));
+  });
+
+  test('parseAdminHomeWorkReminders skips rows without title', () {
+    final reminders = parseAdminHomeWorkReminders({
+      'data': [
+        {'title': '有效提醒', 'subtitle': '副标题'},
+        {'subtitle': '只有副标题'},
+      ],
+    });
+
+    expect(reminders, hasLength(1));
+    expect(reminders.single.title, '有效提醒');
+  });
 }
