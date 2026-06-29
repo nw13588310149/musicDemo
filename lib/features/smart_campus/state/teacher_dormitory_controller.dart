@@ -65,9 +65,6 @@ class TeacherDormitoryController extends StateNotifier<TeacherDormitoryState> {
     state = state.copyWith(loading: true, error: '');
     final date = state.selectedDate;
     final responses = await Future.wait([
-      _repository.headTeacherClassOverview(classId: classId),
-      _repository.classDormitoryDynamicList(classId: classId),
-      _repository.classDormitoryMakeupList(classId: classId),
       _repository.classDormitoryCheckStat(
         classId: classId,
         beginDate: date,
@@ -87,20 +84,11 @@ class TeacherDormitoryController extends StateNotifier<TeacherDormitoryState> {
         .join('；');
     state = state.copyWith(
       loading: false,
-      overview: responses[0].isSuccess
-          ? TeacherDormitoryOverview.fromJson(responses[0].data)
-          : state.overview,
-      dynamicItems: responses[1].isSuccess
-          ? parseTeacherDormitoryDynamicList(responses[1].data)
-          : state.dynamicItems,
-      makeupItems: responses[2].isSuccess
-          ? parseTeacherDormitoryMakeupList(responses[2].data)
-          : state.makeupItems,
-      stat: responses[3].isSuccess
-          ? TeacherDormitoryStat.fromJson(responses[3].data)
+      stat: responses[0].isSuccess
+          ? TeacherDormitoryStat.fromJson(responses[0].data)
           : state.stat,
-      historyItems: responses[4].isSuccess
-          ? parseTeacherDormitoryHistoryList(responses[4].data)
+      historyItems: responses[1].isSuccess
+          ? parseTeacherDormitoryHistoryList(responses[1].data)
           : state.historyItems,
       error: errors,
     );
@@ -156,9 +144,6 @@ class TeacherDormitoryController extends StateNotifier<TeacherDormitoryState> {
       id: id,
       status: approve ? 1 : 2,
     );
-    if (response.isSuccess) {
-      await _reloadMakeups();
-    }
     state = state.copyWith(
       submittingMakeupIds: {...state.submittingMakeupIds}..remove(id),
     );
@@ -177,22 +162,5 @@ class TeacherDormitoryController extends StateNotifier<TeacherDormitoryState> {
     final response = await _repository.classDormitoryMakeupDetail(id: id);
     if (!response.isSuccess) return const [];
     return parseTeacherDormitoryMakeupDetailFields(response.data);
-  }
-
-  Future<void> _reloadMakeups() async {
-    final classId = state.selectedClassId;
-    if (classId.isEmpty) return;
-    final responses = await Future.wait([
-      _repository.classDormitoryMakeupList(classId: classId),
-      _repository.headTeacherClassOverview(classId: classId),
-    ]);
-    state = state.copyWith(
-      makeupItems: responses[0].isSuccess
-          ? parseTeacherDormitoryMakeupList(responses[0].data)
-          : state.makeupItems,
-      overview: responses[1].isSuccess
-          ? TeacherDormitoryOverview.fromJson(responses[1].data)
-          : state.overview,
-    );
   }
 }

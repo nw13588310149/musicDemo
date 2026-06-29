@@ -206,6 +206,20 @@ List<HeadTeacherClassItem> parseTeacherDormitoryClasses(dynamic raw) {
   return parseHeadTeacherIndexRes(raw).classList;
 }
 
+List<HeadTeacherClassItem> parseClassListItems(dynamic raw) {
+  if (raw is Map && raw['data'] is List) {
+    raw = raw['data'];
+  } else if (raw is Map && raw['records'] is List) {
+    raw = raw['records'];
+  }
+  if (raw is! List) return const [];
+  return raw
+      .whereType<Map>()
+      .map((e) => HeadTeacherClassItem.fromJson(Map<String, dynamic>.from(e)))
+      .where((item) => item.classId.isNotEmpty)
+      .toList(growable: false);
+}
+
 List<TeacherDormitoryDynamicItem> parseTeacherDormitoryDynamicList(
   dynamic raw,
 ) {

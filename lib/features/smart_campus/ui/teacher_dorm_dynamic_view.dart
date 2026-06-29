@@ -1,8 +1,8 @@
 // =============================================================================
-// 班主任端「查寝动态」独立页面
+// 宿管端「查寝动态」独立页面
 //
-// 入口：班主任 dashboard 快捷区「查寝动态」按钮 → controller.openDormDynamic()
-//      → mainView == dormDynamic + role == headTeacher → SmartCampusPage
+// 入口：宿管 dashboard 快捷区「查寝动态」按钮 → controller.openDormDynamic()
+//      → mainView == dormDynamic + role == dormManager → SmartCampusPage
 //      路由到本视图。返回：banner 左上角返回按钮 → onBack。
 //
 // 视觉（Figma 970 设计宽）：
@@ -45,7 +45,7 @@ import '../data/student_dormitory_data.dart' show DormitoryDetailField;
 import '../data/teacher_dormitory_data.dart';
 import '../state/smart_campus_controller.dart';
 import '../state/smart_campus_state.dart';
-import '../state/teacher_dormitory_controller.dart';
+import '../state/dorm_class_dormitory_controller.dart';
 import 'widgets/dormitory_detail_dialog.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -229,14 +229,14 @@ class _TeacherDormDynamicViewState
           .clearTeacherDormDynamicInitialTab();
     });
     Future.microtask(
-      () => ref.read(teacherDormitoryControllerProvider.notifier).initialize(),
+      () => ref.read(dormClassDormitoryControllerProvider.notifier).initialize(),
     );
   }
 
   Future<void> _showMakeupDetail(_PunchAuditRecord record) async {
     if (record.id.isEmpty) return;
     final rawFields = await ref
-        .read(teacherDormitoryControllerProvider.notifier)
+        .read(dormClassDormitoryControllerProvider.notifier)
         .loadMakeupDetail(record.id);
     if (!mounted) return;
     if (rawFields.isEmpty) {
@@ -261,7 +261,7 @@ class _TeacherDormDynamicViewState
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final state = ref.watch(teacherDormitoryControllerProvider);
+    final state = ref.watch(dormClassDormitoryControllerProvider);
     final students = _studentRecords(state.dynamicItems);
     final dormRecords = const <_DormRecord>[];
     final punchAudits = _punchAuditRecords(state.makeupItems);
@@ -403,7 +403,7 @@ class _TeacherDormDynamicViewState
 
   Future<void> _onApprovePunchAudit(_PunchAuditRecord record) async {
     final response = await ref
-        .read(teacherDormitoryControllerProvider.notifier)
+        .read(dormClassDormitoryControllerProvider.notifier)
         .auditMakeup(id: record.id, approve: true);
     if (!mounted) return;
     AppToast.show(
@@ -416,7 +416,7 @@ class _TeacherDormDynamicViewState
 
   Future<void> _onRejectPunchAudit(_PunchAuditRecord record) async {
     final response = await ref
-        .read(teacherDormitoryControllerProvider.notifier)
+        .read(dormClassDormitoryControllerProvider.notifier)
         .auditMakeup(id: record.id, approve: false);
     if (!mounted) return;
     AppToast.show(

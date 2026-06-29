@@ -12,6 +12,7 @@ import '../data/admin_home_data.dart';
 import '../data/teacher_notice_data.dart';
 import '../state/admin_home_controller.dart';
 import '../state/admin_home_state.dart';
+import '../state/smart_campus_controller.dart';
 import '../state/smart_campus_state.dart';
 import 'widgets/role_switcher_buttons.dart';
 import 'widgets/smart_campus_avatar_role_badge.dart';
@@ -84,7 +85,7 @@ class AdminHomeView extends ConsumerStatefulWidget {
 
   /// 「群聊」/ 「校长信箱」/ 「校圈治理」三个快捷入口共用全站对应页面：
   /// 由 [smartCampusPage] 传入对应的 `controller.openGroupChat` /
-  /// `controller.openPrincipalMailbox` / `Navigator.pushNamed(circle)`。
+  /// `controller.openPrincipalMailbox` / `controller.openSchoolCircle`。
   final VoidCallback? onOpenGroupChat;
   final VoidCallback? onOpenPrincipalMailbox;
   final VoidCallback? onOpenSchoolCircle;
@@ -122,8 +123,39 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback(
-      (_) => ref.read(adminHomeControllerProvider.notifier).initialize(),
+      (_) => ref
+          .read(adminHomeControllerProvider.notifier)
+          .initialize(widget.selectedRole),
     );
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    assert(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          unawaited(
+            ref
+                .read(adminHomeControllerProvider.notifier)
+                .refresh(role: widget.selectedRole),
+          );
+        }
+      });
+      return true;
+    }());
+  }
+
+  @override
+  void didUpdateWidget(covariant AdminHomeView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedRole != widget.selectedRole) {
+      unawaited(
+        ref
+            .read(adminHomeControllerProvider.notifier)
+            .refresh(role: widget.selectedRole),
+      );
+    }
   }
 
   Future<void> _openNoticeDetail(AdminHomeNotice item) async {
@@ -150,7 +182,11 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
     _StatItem('${summary.studentCount}', '在籍学生'),
     _StatItem('${summary.teacherCount}', '任课老师'),
     _StatItem('${summary.classCount}', '本学期班级'),
-    _StatItem('${summary.toDoTodayCount}', '今日待办', highlight: summary.toDoTodayCount > 0),
+    _StatItem(
+      '${summary.toDoTodayCount}',
+      '今日待办',
+      highlight: summary.toDoTodayCount > 0,
+    ),
   ];
 
   List<_StatItem> _statsRow2(AdminHomeSummary summary) => [
@@ -160,7 +196,10 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
     _StatItem('${summary.postStatus0Count}', '今日校圈'),
   ];
 
-  Widget _buildMainColumn(AdminHomeState homeState, double Function(double) ui) {
+  Widget _buildMainColumn(
+    AdminHomeState homeState,
+    double Function(double) ui,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -171,9 +210,7 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
         SizedBox(height: ui(16)),
         _QuickActionsCard(
           selectedRole: widget.selectedRole,
-          actionBadges: buildAdminQuickActionBadges(
-            pendingSmallCourseApplyCount: homeState.pendingSmallCourseApplyCount,
-          ),
+          actionBadgeCounts: homeState.actionBadgeCounts,
           onOpenGroupChat: widget.onOpenGroupChat,
           onOpenPrincipalMailbox: widget.onOpenPrincipalMailbox,
           onOpenSchoolCircle: widget.onOpenSchoolCircle,
@@ -187,10 +224,7 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
           onOpenSignManagement: widget.onOpenSignManagement,
         ),
         SizedBox(height: ui(16)),
-        const _SectionTitle(
-          title: '数据看板',
-          trailing: '统计最近七日内学校使用人数',
-        ),
+        const _SectionTitle(title: '数据看板', trailing: '统计最近七日内学校使用人数'),
         SizedBox(height: ui(12)),
         _DataDashboardCard(chart: homeState.loginChart),
         SizedBox(height: ui(16)),
@@ -218,9 +252,9 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
                     reminders: homeState.workReminders,
                     loading: homeState.loading,
                     error: homeState.workRemindersError,
-                    onRefresh: ref
+                    onRefresh: () => ref
                         .read(adminHomeControllerProvider.notifier)
-                        .refresh,
+                        .refresh(role: widget.selectedRole),
                   ),
                 ],
               ),
@@ -247,7 +281,9 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
       notices: homeState.notices,
       noticesLoading: homeState.loading,
       noticeError: homeState.noticeError,
-      onRefreshNotices: ref.read(adminHomeControllerProvider.notifier).refresh,
+      onRefreshNotices: () => ref
+          .read(adminHomeControllerProvider.notifier)
+          .refresh(role: widget.selectedRole),
       onOpenNotices: widget.onOpenNotificationManagement,
       onNoticeTap: (item) => unawaited(_openNoticeDetail(item)),
     );
@@ -255,6 +291,21 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int>(
+      smartCampusControllerProvider.select((s) => s.dashboardRefreshEpoch),
+      (previous, next) {
+        if (previous == null || previous == next) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          unawaited(
+            ref
+                .read(adminHomeControllerProvider.notifier)
+                .refresh(role: widget.selectedRole),
+          );
+        });
+      },
+    );
+
     final ui = DashboardScaleScope.of(context).ui;
     final homeState = ref.watch(adminHomeControllerProvider);
     final institutionName = ref.watch(shellControllerProvider).schoolName;
@@ -272,13 +323,17 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
         final isCompact = cw < ui(900);
         final sidebarWidth = ui(256);
         final contentGap = ui(16);
-        final maxH = constraints.maxHeight.isFinite ? constraints.maxHeight : null;
+        final maxH = constraints.maxHeight.isFinite
+            ? constraints.maxHeight
+            : null;
 
         if (isCompact) {
           return SmartCampusHomeCard(
             height: maxH,
             color: Colors.transparent,
+            clipContent: false,
             child: SingleChildScrollView(
+              clipBehavior: Clip.none,
               physics: const ClampingScrollPhysics(),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -303,7 +358,9 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
         return SmartCampusHomeCard(
           height: maxH,
           color: Colors.transparent,
+          clipContent: false,
           child: SingleChildScrollView(
+            clipBehavior: Clip.none,
             physics: const ClampingScrollPhysics(),
             child: IntrinsicHeight(
               child: Row(
@@ -361,50 +418,17 @@ class _QuickAction {
 }
 
 const _quickActions = <_QuickAction>[
-  _QuickAction(
-    '学生管理',
-    'assets/images/new/智慧校园/管理员/学生管理.png',
-  ),
-  _QuickAction(
-    '教师管理',
-    'assets/images/new/智慧校园/管理员/教师管理.png',
-  ),
-  _QuickAction(
-    '班级编辑',
-    'assets/images/new/智慧校园/管理员/班级编辑.png',
-  ),
-  _QuickAction(
-    '排课与课表',
-    'assets/images/new/智慧校园/管理员/排课与课表.png',
-  ),
-  _QuickAction(
-    '签课管理',
-    'assets/images/new/智慧校园/管理员/排课与课表.png',
-  ),
-  _QuickAction(
-    '教师请假审批',
-    'assets/images/new/智慧校园/管理员/宿管请假审批.png',
-  ),
-  _QuickAction(
-    '人脸库',
-    'assets/images/new/智慧校园/管理员/人脸库.png',
-  ),
-  _QuickAction(
-    '通知管理',
-    'assets/images/new/智慧校园/管理员/通知管理.png',
-  ),
-  _QuickAction(
-    '群聊',
-    'assets/images/new/智慧校园/管理员/群聊.png',
-  ),
-  _QuickAction(
-    '校长信箱',
-    'assets/images/new/智慧校园/管理员/校长信箱.png',
-  ),
-  _QuickAction(
-    '校圈治理',
-    'assets/images/new/智慧校园/管理员/校圈.png',
-  ),
+  _QuickAction('学生管理', 'assets/images/new/智慧校园/管理员/学生管理.png'),
+  _QuickAction('教师管理', 'assets/images/new/智慧校园/管理员/教师管理.png'),
+  _QuickAction('班级编辑', 'assets/images/new/智慧校园/管理员/班级编辑.png'),
+  _QuickAction('排课与课表', 'assets/images/new/智慧校园/管理员/排课与课表.png'),
+  _QuickAction('签课管理', 'assets/images/new/智慧校园/管理员/排课与课表.png'),
+  _QuickAction('教师请假审批', 'assets/images/new/智慧校园/管理员/宿管请假审批.png'),
+  _QuickAction('人脸库', 'assets/images/new/智慧校园/管理员/人脸库.png'),
+  _QuickAction('通知管理', 'assets/images/new/智慧校园/管理员/通知管理.png'),
+  _QuickAction('群聊', 'assets/images/new/智慧校园/管理员/群聊.png'),
+  _QuickAction('校长信箱', 'assets/images/new/智慧校园/管理员/校长信箱.png'),
+  _QuickAction('校圈治理', 'assets/images/new/智慧校园/管理员/校圈.png'),
 ];
 
 const _mailboxQuickAction = _QuickAction(
@@ -427,8 +451,8 @@ const _fourEndsTabs = <String>['学生端', '任课老师', '班主任', '宿管
 const _fourEndsContent = <String, ({String title, String body})>{
   '学生端': (title: '核心场景', body: '课表、作业、成绩、课堂签到、请假与补课、查寝管理、校圈、我的班级、群聊'),
   '任课老师': (title: '核心场景', body: '授课课表、签课管理、学生名册、作业批改、考评管理、课堂签到、班级公告、群聊'),
-  '班主任': (title: '核心场景', body: '班级工作台、请假审批、查寝动态、查寝历史、学生档案、家校沟通、班级通知、群聊'),
-  '宿管端': (title: '核心场景', body: '查寝排班、晨晚查寝、补卡审核、请假审批、宿舍异常处理、宿舍人脸库、通知发布'),
+  '班主任': (title: '核心场景', body: '班级工作台、请假审批、查寝历史、学生档案、家校沟通、班级通知、群聊'),
+  '宿管端': (title: '核心场景', body: '查寝排班、晨晚查寝、查寝动态、补卡审核、请假审批、宿舍异常处理、宿舍人脸库、通知发布'),
 };
 
 const _managerEndContent = '学籍 / 排课与课表 / 人脸库 / 校圈治理 / 通知管理 / 校长信箱 / 校园数据看板';
@@ -484,7 +508,7 @@ class _SectionTitle extends StatelessWidget {
 class _QuickActionsCard extends StatelessWidget {
   const _QuickActionsCard({
     required this.selectedRole,
-    this.actionBadges = const {},
+    this.actionBadgeCounts = const AdminHomeActionBadgeCounts(),
     this.onOpenGroupChat,
     this.onOpenPrincipalMailbox,
     this.onOpenSchoolCircle,
@@ -499,7 +523,7 @@ class _QuickActionsCard extends StatelessWidget {
   });
 
   final SmartCampusRole selectedRole;
-  final Map<String, String?> actionBadges;
+  final AdminHomeActionBadgeCounts actionBadgeCounts;
   final VoidCallback? onOpenGroupChat;
   final VoidCallback? onOpenPrincipalMailbox;
   final VoidCallback? onOpenSchoolCircle;
@@ -549,7 +573,11 @@ class _QuickActionsCard extends StatelessWidget {
           SmartCampusQuickActionItem(
             label: action.label,
             assetPath: action.iconAsset,
-            badgeLabel: actionBadges[action.label] ?? action.badge,
+            badgeLabel:
+                action.label == '校长信箱' &&
+                    selectedRole != SmartCampusRole.principal
+                ? null
+                : actionBadgeCounts.badgeLabelFor(action.label) ?? action.badge,
             onTap: _resolveTap(action.label),
           ),
       ],
@@ -1217,8 +1245,7 @@ class _AdminSidePanel extends StatelessWidget {
     // 只有用户实际拥有 2+ 个身份（且上层传入了切换回调）时才显示「身份切换」
     // 区块。单身份 admin（普通校长 / 教务管理员）下隐藏，避免出现"只能切到
     // 自己"的无意义按钮。
-    final showRoleSwitcher =
-        onSelectRole != null && availableRoles.length > 1;
+    final showRoleSwitcher = onSelectRole != null && availableRoles.length > 1;
     final panel = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: fillHeight ? MainAxisSize.max : MainAxisSize.min,

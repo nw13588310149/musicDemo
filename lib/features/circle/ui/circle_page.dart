@@ -33,7 +33,19 @@ class _CirclePageScrollBehavior extends MaterialScrollBehavior {
 }
 
 class CirclePage extends ConsumerWidget {
-  const CirclePage({super.key});
+  const CirclePage({super.key, this.onBack});
+
+  /// 智慧校园等内嵌场景：返回 dashboard / 来源页，不走 Navigator pop。
+  final VoidCallback? onBack;
+
+  void _handleBack(BuildContext context, CircleController controller) {
+    controller.stopMediaPlayback();
+    if (onBack != null) {
+      onBack!();
+      return;
+    }
+    Navigator.of(context).maybePop();
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -43,58 +55,69 @@ class CirclePage extends ConsumerWidget {
 
     // 顶部标题栏与下方内容区是两个独立的 16 圆角面板，
     // 中间留 16px 透明间距让 Dashboard 的 #EFF3FC 背景透出来。
-    return ScrollConfiguration(
-      behavior: _CirclePageScrollBehavior(),
-      child: PopScope(
-        onPopInvokedWithResult: (didPop, _) {
-          controller.stopMediaPlayback();
-        },
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SizedBox(
-              width: constraints.maxWidth,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _CircleHeader(
-                    mode: state.mode,
-                    onBack: () {
-                      controller.stopMediaPlayback();
-                      Navigator.of(context).maybePop();
-                    },
-                    onModeChanged: controller.setMode,
-                  ),
-                  SizedBox(height: ui(16)),
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(ui(16)),
-                      child: Stack(
-                        clipBehavior: Clip.hardEdge,
-                        children: [
-                          Positioned.fill(
-                            child: _CircleBody(
-                              state: state,
-                              controller: controller,
-                              permissions: ref.watch(circlePermissionsProvider),
-                            ),
-                          ),
-                          // 沉浸模式下铺满全屏显示视频/图片，FAB 会挡视线，隐藏掉。
-                          if (state.mode != CircleMode.immersive)
-                            Positioned(
-                              right: ui(20),
-                              bottom: ui(20),
-                              child: _PublishFab(
-                                onTap: () => showCirclePublishDialog(context),
+    // 智慧校园 overlay 等入口用 ColoredBox 包一层后直接挂本页，树里没有
+    // Scaffold/Material，Text 会落到 _errorTextStyle 并在 iOS 上出现黄色下划线。
+    return Material(
+      type: MaterialType.transparency,
+      child: ScrollConfiguration(
+        behavior: _CirclePageScrollBehavior(),
+        child: PopScope(
+          canPop: onBack == null,
+          onPopInvokedWithResult: (didPop, _) {
+            if (didPop) {
+              controller.stopMediaPlayback();
+              return;
+            }
+            if (onBack != null) {
+              _handleBack(context, controller);
+            }
+          },
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SizedBox(
+                width: constraints.maxWidth,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _CircleHeader(
+                      mode: state.mode,
+                      onBack: () => _handleBack(context, controller),
+                      onModeChanged: controller.setMode,
+                    ),
+                    SizedBox(height: ui(16)),
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(ui(16)),
+                        child: Stack(
+                          clipBehavior: Clip.hardEdge,
+                          children: [
+                            Positioned.fill(
+                              child: _CircleBody(
+                                state: state,
+                                controller: controller,
+                                permissions:
+                                    ref.watch(circlePermissionsProvider),
                               ),
                             ),
-                        ],
+                            // 沉浸模式下铺满全屏显示视频/图片，FAB 会挡视线，隐藏掉。
+                            if (state.mode != CircleMode.immersive)
+                              Positioned(
+                                right: ui(20),
+                                bottom: ui(20),
+                                child: _PublishFab(
+                                  onTap: () =>
+                                      showCirclePublishDialog(context),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            );
-          },
+                  ],
+                ),
+              );
+            },
+          ),
         ),
       ),
     );

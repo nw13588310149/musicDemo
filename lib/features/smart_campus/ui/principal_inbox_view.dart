@@ -7,10 +7,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
-import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../../../core/constants/app_assets.dart';
 import '../data/principal_inbox_data.dart';
 import '../data/principal_mailbox_repository.dart';
 import 'mailbox_attachment_widgets.dart';
@@ -124,10 +124,7 @@ class _PrincipalInboxViewState extends ConsumerState<PrincipalInboxView> {
     try {
       final resp = await ref
           .read(principalMailboxRepositoryProvider)
-          .headmasterPrincipalMailboxReply(
-            id: item.id,
-            replyContent: content,
-          );
+          .headmasterPrincipalMailboxReply(id: item.id, replyContent: content);
       if (!mounted) return;
       if (!resp.isSuccess) {
         AppToast.show(context, resp.displayMsg);
@@ -696,4 +693,3 @@ class _EmptyHint extends StatelessWidget {
     );
   }
 }
-

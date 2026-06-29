@@ -19,7 +19,11 @@ import '../data/schedule_course_card_builder.dart';
 import '../data/smart_campus_count_badge.dart';
 import '../data/smart_campus_dashboard_data.dart';
 import '../data/student_dormitory_data.dart';
+import '../data/student_index_data.dart';
+import '../data/student_leave_data.dart';
+import '../data/student_exam_schedule_data.dart';
 import '../data/student_repository.dart';
+import '../data/teacher_leave_data.dart';
 import '../data/teacher_notice_data.dart';
 import '../data/teacher_repository.dart';
 import '../state/smart_campus_controller.dart';
@@ -87,7 +91,6 @@ class TeacherDashboardLayout extends ConsumerStatefulWidget {
     this.onOpenExamReview,
     this.onOpenMyTeacherLeave,
     this.onOpenLeaveApproval,
-    this.onOpenDormDynamic,
     this.onOpenDormHistory,
     this.onOpenHomeSchool,
     this.onSelectRole,
@@ -123,8 +126,8 @@ class TeacherDashboardLayout extends ConsumerStatefulWidget {
   /// 「群聊」入口（学生 / 教师 / 班主任 共用同一个聊天页面）。
   final VoidCallback? onOpenGroupChat;
 
-  /// 「校圈」入口：学生 / 教师 / 班主任 / 宿管 共用，跳转到首页同名校圈
-  /// 详情（CirclePage / RoutePaths.circle）。
+  /// 「校圈」入口：学生 / 教师 / 班主任 / 宿管 共用，进入智慧校园内嵌
+  /// [CirclePage]（mainView == schoolCircle）。
   final VoidCallback? onOpenSchoolCircle;
 
   /// 学生端「请假管理」入口（"请假补课"页面）；其他角色入口名为
@@ -161,11 +164,6 @@ class TeacherDashboardLayout extends ConsumerStatefulWidget {
   /// 提示与备案说明 + 6 状态 tabs + 搜索框 + 双列申请卡片，审批中卡片
   /// 底部"通过 / 驳回"按钮，"驳回"打开 `GradientHeaderDialog` 弹窗）。
   final VoidCallback? onOpenLeaveApproval;
-
-  /// 班主任「查寝动态」入口：进入掌握本班住宿生归宿与晨检结果的页面
-  /// （4 张统计卡 + tabs「本班查纪 / 补卡审核」+ 学生口径 / 宿舍口径
-  /// 卡片网格 + 全部 / 异常 toggle）。
-  final VoidCallback? onOpenDormDynamic;
 
   /// 班主任「查寝历史」入口：按自然日查看本班住宿生晚查寝/晨查寝打卡
   /// 汇总（顶部 banner + 14 天日期条 + 4 张统计卡 + 晚查寝/晨查寝 tabs +
@@ -206,6 +204,17 @@ class _TeacherDashboardLayoutState
     _localTab = _coerceRole(widget.selectedRole);
     _syncPlaceholderData();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadHomeData());
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    assert(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadHomeData();
+      });
+      return true;
+    }());
   }
 
   void _syncPlaceholderData() {
@@ -343,11 +352,13 @@ class _TeacherDashboardLayoutState
       final results = await Future.wait([
         repo.courseTeacherIndex(),
         repo.courseList(beginDate: weekRange.$1, endDate: weekRange.$2),
+        repo.teacherLeaveList(current: 1, size: 200, status: 0),
       ]);
       if (!mounted) return;
 
       final indexResp = results[0];
       final weekResp = results[1];
+      final myLeaveResp = results[2];
       final weekCount = weekResp.isSuccess
           ? countWeekCoursesFromCourseList(weekResp.data)
           : null;
@@ -360,6 +371,9 @@ class _TeacherDashboardLayoutState
       }
 
       final index = parseCourseTeacherIndexRes(indexResp.data);
+      final myLeavePendingCount = myLeaveResp.isSuccess
+          ? parseTeacherLeavePendingCount(myLeaveResp.data)
+          : 0;
       final base = smartCampusDashboardDataForRole(SmartCampusRole.teacher);
       setState(() {
         _courseTeacherIndex = index;
@@ -369,7 +383,10 @@ class _TeacherDashboardLayoutState
         );
         _actions = _applyActionBadges(
           base.actions,
-          buildCourseTeacherActionBadges(index),
+          buildCourseTeacherActionBadges(
+            index,
+            myLeavePendingCount: myLeavePendingCount,
+          ),
         );
       });
     } catch (_) {
@@ -379,24 +396,36 @@ class _TeacherDashboardLayoutState
 
   Future<void> _loadHeadTeacherHome() async {
     if (!mounted) return;
+    final repo = ref.read(teacherRepositoryProvider);
     try {
-      final resp =
-          await ref.read(teacherRepositoryProvider).headTeacherIndex();
+      final results = await Future.wait([
+        repo.headTeacherIndex(),
+        repo.teacherLeaveList(current: 1, size: 200, status: 0),
+      ]);
       if (!mounted) return;
-      if (!resp.isSuccess) {
-        if (resp.msg.isNotEmpty) {
-          AppToast.show(context, resp.msg);
+
+      final indexResp = results[0];
+      final myLeaveResp = results[1];
+      if (!indexResp.isSuccess) {
+        if (indexResp.msg.isNotEmpty) {
+          AppToast.show(context, indexResp.msg);
         }
         return;
       }
 
-      final index = parseHeadTeacherIndexRes(resp.data);
+      final index = parseHeadTeacherIndexRes(indexResp.data);
+      final myLeavePendingCount = myLeaveResp.isSuccess
+          ? parseTeacherLeavePendingCount(myLeaveResp.data)
+          : 0;
       final base = smartCampusDashboardDataForRole(SmartCampusRole.headTeacher);
       setState(() {
         _stats = buildHeadTeacherStats(index);
         _actions = _applyActionBadges(
           base.actions,
-          buildHeadTeacherActionBadges(index),
+          buildHeadTeacherActionBadges(
+            index,
+            myLeavePendingCount: myLeavePendingCount,
+          ),
         );
         _headTeacherTodos = _mapHeadTeacherBoardItems(
           buildHeadTeacherTodoBoardItems(index),
@@ -444,18 +473,9 @@ class _TeacherDashboardLayoutState
 
   void _handleHeadTeacherTodoTap(String tag) {
     _persistLocalTabToGlobal();
-    final controller = ref.read(smartCampusControllerProvider.notifier);
     switch (tag) {
       case '请假':
         widget.onOpenLeaveApproval?.call();
-      case '补卡':
-        controller.openDormDynamic(
-          initialTab: TeacherDormDynamicInitialTab.punchAudit,
-        );
-      case '查寝':
-        controller.openDormDynamic(
-          initialTab: TeacherDormDynamicInitialTab.classRoster,
-        );
       case '班级':
         widget.onOpenClassWorkbench();
     }
@@ -473,6 +493,16 @@ class _TeacherDashboardLayoutState
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int>(
+      smartCampusControllerProvider.select((s) => s.dashboardRefreshEpoch),
+      (previous, next) {
+        if (previous == null || previous == next) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _loadHomeData();
+        });
+      },
+    );
+
     final ui = DashboardScaleScope.of(context).ui;
     final data = smartCampusDashboardDataForRole(_localTab);
     final institutionName = ref.watch(shellControllerProvider).schoolName;
@@ -505,7 +535,6 @@ class _TeacherDashboardLayoutState
     final onOpenLeaveApproval = _guardedNavOptional(
       widget.onOpenLeaveApproval,
     );
-    final onOpenDormDynamic = _guardedNavOptional(widget.onOpenDormDynamic);
     final onOpenDormHistory = _guardedNavOptional(widget.onOpenDormHistory);
     final onOpenHomeSchool = _guardedNavOptional(widget.onOpenHomeSchool);
 
@@ -565,7 +594,6 @@ class _TeacherDashboardLayoutState
                   onOpenExamReview: onOpenExamReview,
                   onOpenMyTeacherLeave: onOpenMyTeacherLeave,
                   onOpenLeaveApproval: onOpenLeaveApproval,
-                  onOpenDormDynamic: onOpenDormDynamic,
                   onOpenDormHistory: onOpenDormHistory,
                   onOpenHomeSchool: onOpenHomeSchool,
                   onHeadTeacherTodoTap: _handleHeadTeacherTodoTap,
@@ -620,7 +648,6 @@ class _TeacherDashboardLayoutState
                 onOpenExamReview: onOpenExamReview,
                 onOpenMyTeacherLeave: onOpenMyTeacherLeave,
                 onOpenLeaveApproval: onOpenLeaveApproval,
-                onOpenDormDynamic: onOpenDormDynamic,
                 onOpenDormHistory: onOpenDormHistory,
                 onOpenHomeSchool: onOpenHomeSchool,
                 onHeadTeacherTodoTap: _handleHeadTeacherTodoTap,
@@ -686,7 +713,6 @@ class _TeacherMainColumn extends StatelessWidget {
     this.onOpenExamReview,
     this.onOpenMyTeacherLeave,
     this.onOpenLeaveApproval,
-    this.onOpenDormDynamic,
     this.onOpenDormHistory,
     this.onOpenHomeSchool,
     this.onHeadTeacherTodoTap,
@@ -717,7 +743,6 @@ class _TeacherMainColumn extends StatelessWidget {
   final VoidCallback? onOpenExamReview;
   final VoidCallback? onOpenMyTeacherLeave;
   final VoidCallback? onOpenLeaveApproval;
-  final VoidCallback? onOpenDormDynamic;
   final VoidCallback? onOpenDormHistory;
   final VoidCallback? onOpenHomeSchool;
   final void Function(String tag)? onHeadTeacherTodoTap;
@@ -746,7 +771,6 @@ class _TeacherMainColumn extends StatelessWidget {
       onOpenExamReview: onOpenExamReview,
       onOpenMyTeacherLeave: onOpenMyTeacherLeave,
       onOpenLeaveApproval: onOpenLeaveApproval,
-      onOpenDormDynamic: onOpenDormDynamic,
       onOpenDormHistory: onOpenDormHistory,
       onOpenHomeSchool: onOpenHomeSchool,
     );
@@ -912,7 +936,6 @@ class _TeacherActionPanel extends StatelessWidget {
     this.onOpenExamReview,
     this.onOpenMyTeacherLeave,
     this.onOpenLeaveApproval,
-    this.onOpenDormDynamic,
     this.onOpenDormHistory,
     this.onOpenHomeSchool,
   });
@@ -936,7 +959,6 @@ class _TeacherActionPanel extends StatelessWidget {
   final VoidCallback? onOpenExamReview;
   final VoidCallback? onOpenMyTeacherLeave;
   final VoidCallback? onOpenLeaveApproval;
-  final VoidCallback? onOpenDormDynamic;
   final VoidCallback? onOpenDormHistory;
   final VoidCallback? onOpenHomeSchool;
 
@@ -968,9 +990,7 @@ class _TeacherActionPanel extends StatelessWidget {
       // 五端共用：群聊（任一角色点击都进入同一聊天主界面）。
       case '群聊':
         return onOpenGroupChat;
-      // 学生 / 教师 / 班主任 / 宿管 共用：「校圈」按钮 → 跳转到首页同名校圈
-      // 全屏页（CirclePage / RoutePaths.circle）。学生历史 label 是 "校园"，
-      // 数据层已统一改为 "校圈"。
+      // 五端共用：「校圈」→ controller.openSchoolCircle() → 智慧校园内嵌页。
       case '校圈':
         return onOpenSchoolCircle;
       // 学生端「我的请假」与教师端同名；学生传 onOpenLeaveManagement，教师传
@@ -1005,12 +1025,6 @@ class _TeacherActionPanel extends StatelessWidget {
       // 卡片底部"通过 / 驳回"按钮，"驳回"打开 GradientHeaderDialog 弹窗）。
       case '请假审批':
         return onOpenLeaveApproval;
-      // 班主任专属：「查寝动态」→ 进入掌握本班住宿生归宿与晨检结果、协同
-      // 处理补卡与异常跟进的总览页（4 张统计卡 + 「本班查纪 / 补卡审核」
-      // tabs + 搜索 + 「全部异常记录 N 条」+ 全部 / 异常 toggle + 学生口径
-      // 与宿舍口径两类卡片网格）。
-      case '查寝动态':
-        return onOpenDormDynamic;
       // 班主任专属：「查寝历史」→ 进入按自然日查看本班住宿生晚查寝/晨查寝
       // 打卡汇总的总览页（顶部 banner + 14 天日期条 + 4 张统计卡 +
       // 晚查寝 / 晨查寝 tabs + 宿舍口径 / 学生口径混合卡片网格）。
@@ -2384,10 +2398,15 @@ _BuiltDashboardSchedule _buildDashboardScheduleFromIndex({
   }
 
   _LessonScheduleData? current;
-  if (index.nextCourse != null) {
-    final times = _resolveRowTimes(index.nextCourse!, timeConfigs);
+  final currentRow = _resolveTeacherCurrentCourseRow(
+    index: index,
+    timeConfigs: timeConfigs,
+    now: now,
+  );
+  if (currentRow != null) {
+    final times = _resolveRowTimes(currentRow, timeConfigs);
     final phase = _slotPhase(now, times.start, times.end);
-    current = lessonFromRow(index.nextCourse!, phase);
+    current = lessonFromRow(currentRow, phase);
   }
 
   final todayEntries = <({int sortKey, _LessonScheduleData lesson})>[];
@@ -2403,6 +2422,25 @@ _BuiltDashboardSchedule _buildDashboardScheduleFromIndex({
   final today = todayEntries.map((e) => e.lesson).toList(growable: false);
 
   return _BuiltDashboardSchedule(current: current, today: today);
+}
+
+/// 首页「当前课程」：优先 API `currentCourse`，否则从今日课表中找进行中时段。
+Map<String, dynamic>? _resolveTeacherCurrentCourseRow({
+  required CourseTeacherIndexRes index,
+  required List<_DashboardTimeConfig> timeConfigs,
+  required DateTime now,
+}) {
+  if (index.currentCourse != null) {
+    return index.currentCourse;
+  }
+  for (final row in index.todayCourseList) {
+    final times = _resolveRowTimes(row, timeConfigs);
+    if (_slotPhase(now, times.start, times.end) ==
+        _LessonSlotPhase.inProgress) {
+      return row;
+    }
+  }
+  return null;
 }
 
 class _ResolvedRowTimes {

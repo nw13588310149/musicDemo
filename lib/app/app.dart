@@ -15,6 +15,7 @@ import '../core/theme/app_theme.dart';
 import '../core/utils/keyboard_dismisser.dart';
 import '../features/auth/data/auth_repository.dart';
 import '../features/shell/navigation/shell_polling_route_observer.dart';
+import '../features/shell/state/shell_controller.dart';
 import 'router/app_navigator.dart';
 import 'router/app_router.dart';
 import 'router/route_paths.dart';
@@ -33,7 +34,17 @@ class _MyAppState extends ConsumerState<MyApp> {
   @override
   void initState() {
     super.initState();
-    _shellPollingRouteObserver = ShellPollingRouteObserver(ref);
+    _shellPollingRouteObserver = ShellPollingRouteObserver(
+      onSyncPolling: (isAuthRoute) {
+        if (!ref.exists(shellControllerProvider)) return;
+        final controller = ref.read(shellControllerProvider.notifier);
+        if (isAuthRoute) {
+          controller.pausePolling();
+        } else {
+          controller.resumePolling();
+        }
+      },
+    );
     bindApiUnauthorizedSessionCleanup(ref);
     ref.read(appNetworkMonitorProvider);
 

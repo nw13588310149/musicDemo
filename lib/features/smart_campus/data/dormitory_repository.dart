@@ -265,4 +265,118 @@ class DormitoryRepository {
       idErrorMessage: '补卡申请 id 格式错误',
     );
   }
+
+  // ============== 班级查寝动态 / 历史（宿管端） ==============
+
+  /// 班级学生最新查寝状态。
+  Future<ApiResponse> classDormitoryDynamicList({
+    required String classId,
+    String? status,
+    int current = 1,
+    int size = 200,
+  }) {
+    return _postEncoded(
+      '$_base/classDormitoryDynamicList',
+      <String, dynamic>{
+        'classId': classId,
+        'current': current,
+        'size': size,
+        if (status != null && status.isNotEmpty) 'status': status,
+      },
+      numericIdKeys: const {'classId'},
+      idErrorMessage: '班级 id 格式错误',
+    );
+  }
+
+  /// 班级历史查寝记录。
+  Future<ApiResponse> classDormitoryCheckHistory({
+    required String classId,
+    String? beginDate,
+    String? endDate,
+    String? status,
+    String? studentId,
+    int current = 1,
+    int size = 200,
+  }) {
+    return _postEncoded(
+      '$_base/classDormitoryCheckHistory',
+      <String, dynamic>{
+        'classId': classId,
+        'current': current,
+        'size': size,
+        if (beginDate != null && beginDate.isNotEmpty) 'beginDate': beginDate,
+        if (endDate != null && endDate.isNotEmpty) 'endDate': endDate,
+        if (status != null && status.isNotEmpty) 'status': status,
+        if (studentId != null && studentId.isNotEmpty) 'studentId': studentId,
+      },
+      numericIdKeys: const {'classId', 'studentId'},
+      idErrorMessage: '班级或学生 id 格式错误',
+    );
+  }
+
+  /// 班级查寝统计。
+  Future<ApiResponse> classDormitoryCheckStat({
+    required String classId,
+    String? beginDate,
+    String? endDate,
+  }) {
+    return _postEncoded(
+      '$_base/classDormitoryCheckStat',
+      <String, dynamic>{
+        'classId': classId,
+        if (beginDate != null && beginDate.isNotEmpty) 'beginDate': beginDate,
+        if (endDate != null && endDate.isNotEmpty) 'endDate': endDate,
+      },
+      numericIdKeys: const {'classId'},
+      idErrorMessage: '班级 id 格式错误',
+    );
+  }
+
+  /// 单次查寝详情。
+  Future<ApiResponse> classDormitoryCheckDetail({required String id}) {
+    return _postLongId('$_base/classDormitoryCheckDetail', id);
+  }
+
+  /// 班级补卡申请列表。
+  Future<ApiResponse> classDormitoryMakeupList({
+    required String classId,
+    int? status,
+    int current = 1,
+    int size = 200,
+  }) {
+    return _postEncoded(
+      '$_base/classDormitoryMakeupList',
+      <String, dynamic>{
+        'classId': classId,
+        'current': current,
+        'size': size,
+        'status': ?status,
+      },
+      numericIdKeys: const {'classId'},
+      idErrorMessage: '班级 id 格式错误',
+    );
+  }
+
+  /// 补卡申请详情。
+  Future<ApiResponse> classDormitoryMakeupDetail({required String id}) {
+    return _postLongId('$_base/classDormitoryMakeupDetail', id);
+  }
+
+  /// 审批补卡申请。`status`: 1-通过 / 2-拒绝。
+  Future<ApiResponse> classDormitoryMakeupAudit({
+    required String id,
+    required int status,
+    String auditReason = '',
+  }) {
+    return _postEncoded(
+      '$_base/classDormitoryMakeupAudit',
+      <String, dynamic>{
+        'id': id,
+        'status': status,
+        if (auditReason.isNotEmpty) 'auditReason': auditReason,
+      },
+      numericIdKeys: const {'id'},
+      idErrorMessage: '补卡申请 id 格式错误',
+    );
+  }
 }

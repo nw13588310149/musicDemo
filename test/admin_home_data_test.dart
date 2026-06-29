@@ -56,4 +56,98 @@ void main() {
     expect(reminders, hasLength(1));
     expect(reminders.single.title, '有效提醒');
   });
+
+  test('AdminHomeSummary unwraps nested indexSum data', () {
+    final summary = AdminHomeSummary.fromJson({
+      'data': {
+        'studentCount': 10,
+        'leaveStatus0Count': 3,
+        'postStatus0Count': 5,
+        'smallCourseSignStatus5Count': 2,
+      },
+    });
+
+    expect(summary.studentCount, 10);
+    expect(summary.leaveStatus0Count, 3);
+    expect(summary.postStatus0Count, 5);
+    expect(summary.smallCourseSignStatus5Count, 2);
+  });
+
+  test('AdminHomeActionBadgeCounts maps labels to badge text', () {
+    const counts = AdminHomeActionBadgeCounts(
+      scheduleApply: 4,
+      teacherLeave: 3,
+      signReview: 2,
+      faceAudit: 1,
+      postReview: 6,
+    );
+
+    expect(counts.badgeLabelFor('排课与课表'), '4');
+    expect(counts.badgeLabelFor('教师请假审批'), '3');
+    expect(counts.badgeLabelFor('签课管理'), '2');
+    expect(counts.badgeLabelFor('人脸库'), '1');
+    expect(counts.badgeLabelFor('校圈治理'), '6');
+    expect(counts.badgeLabelFor('群聊'), isNull);
+  });
+
+  test('admin action badges hide zero and cap large counts at 9+', () {
+    const empty = AdminHomeActionBadgeCounts(scheduleApply: 0);
+    const ten = AdminHomeActionBadgeCounts(scheduleApply: 10);
+    const many = AdminHomeActionBadgeCounts(scheduleApply: 11);
+
+    expect(empty.badgeLabelFor('排课与课表'), isNull);
+    expect(ten.badgeLabelFor('排课与课表'), '10');
+    expect(many.badgeLabelFor('排课与课表'), '9+');
+  });
+
+  test('AdminHomeActionBadgeCounts.fromSummary mirrors top stats fields', () {
+    const summary = AdminHomeSummary(
+      leaveStatus0Count: 7,
+      smallCourseSignStatus5Count: 8,
+      postStatus0Count: 9,
+    );
+    final counts = AdminHomeActionBadgeCounts.fromSummary(
+      summary: summary,
+      scheduleApply: 1,
+      faceAudit: 2,
+    );
+
+    expect(counts.teacherLeave, 7);
+    expect(counts.signReview, 8);
+    expect(counts.postReview, 9);
+    expect(counts.badgeLabelFor('教师请假审批'), '7');
+    expect(counts.badgeLabelFor('校圈治理'), '9');
+  });
+
+  test('admin badge parsers support nested API payloads', () {
+    expect(
+      parseAdminPageTotal({
+        'data': {
+          'data': {'records': const [], 'total': '12'},
+        },
+      }),
+      12,
+    );
+    expect(
+      parseAdminFaceSumPendingCount({
+        'data': {
+          'data': {'status0Count': '4'},
+        },
+      }),
+      4,
+    );
+  });
+
+  test('pending list count falls back to returned records', () {
+    expect(
+      parseAdminListPendingTotal({
+        'data': {
+          'records': [
+            {'id': '1'},
+          ],
+        },
+      }),
+      1,
+    );
+  });
 }

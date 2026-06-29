@@ -72,7 +72,17 @@ PrincipalInboxPage parsePrincipalInboxPage(dynamic raw) {
   return PrincipalInboxPage(items: items, total: total);
 }
 
+/// 校长端待回复角标：`headmaster/principalMailboxList` 的 `data` 常为数组
+///（无 `total`），此时以数组长度计数；分页对象则优先读 `total` 等字段。
+int parsePrincipalInboxPendingCount(dynamic raw) {
+  if (raw is List) return raw.length;
+  final total = parsePrincipalInboxTotal(raw);
+  if (total != null) return total;
+  return parsePrincipalInboxList(raw).length;
+}
+
 int? parsePrincipalInboxTotal(dynamic raw) {
+  if (raw is List) return raw.length;
   final map = _resolvePageMap(raw);
   if (map == null) return null;
   for (final key in const ['total', 'totalCount', 'recordsTotal', 'count']) {
@@ -86,6 +96,7 @@ int? parsePrincipalInboxTotal(dynamic raw) {
 }
 
 Map<String, dynamic>? _resolvePageMap(dynamic raw) {
+  if (raw is List) return null;
   if (raw is! Map) return null;
   var map = Map<String, dynamic>.from(raw);
   if (map['data'] is Map) {
@@ -142,6 +153,7 @@ List<dynamic> _asList(dynamic data) {
   if (data is List) return data;
   if (data is Map) {
     final map = data.cast<String, dynamic>();
+    if (map['data'] is List) return map['data'] as List;
     if (map['data'] is Map) return _asList(map['data']);
     for (final key in const ['records', 'list', 'rows', 'data', 'items']) {
       final value = map[key];

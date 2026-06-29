@@ -35,6 +35,7 @@ import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dar
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers/app_providers.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../courseware/state/cloud_drive_controller.dart';
 import '../../courseware/ui/courseware_file_picker.dart';
@@ -246,6 +247,12 @@ class _PrincipalMailboxViewState extends ConsumerState<PrincipalMailboxView> {
     }
     if (att != null && att.hasError) {
       _toast('附件上传失败，请重试或移除');
+      return;
+    }
+
+    final sid = ref.read(appStorageProvider).cachedSchoolId.trim();
+    if (sid.isEmpty || sid == '0') {
+      _toast('未绑定学校');
       return;
     }
 

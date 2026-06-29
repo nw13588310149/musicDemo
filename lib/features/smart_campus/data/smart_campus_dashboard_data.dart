@@ -609,14 +609,6 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
                 'assets/images/new/智慧校园/学生端/请假管理.png',
           ),
           SmartCampusQuickActionData(
-            label: '查寝动态',
-            icon: Icons.king_bed_rounded,
-            background: _purpleSoft,
-            foreground: _purple,
-            imagePath:
-                'assets/images/new/智慧校园/班主任/查寝动态.png',
-          ),
-          SmartCampusQuickActionData(
             label: '查寝历史',
             icon: Icons.history_rounded,
             background: _purpleSoft,
@@ -725,7 +717,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
               badgeForeground: _blue,
               badgeBackground: _blueSoft,
               title: '查寝异常记录待跟进',
-              subtitle: '进入「查寝动态」确认归宿情况',
+              subtitle: '进入「查寝历史」确认归宿情况',
               person: '待办',
               personHint: '与顶部「查寝异常」统计联动',
               trailing: '待确认',
@@ -784,6 +776,14 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             foreground: _purple,
             imagePath:
                 'assets/images/new/智慧校园/宿管/按宿舍查寝.png',
+          ),
+          SmartCampusQuickActionData(
+            label: '查寝动态',
+            icon: Icons.king_bed_rounded,
+            background: _purpleSoft,
+            foreground: _purple,
+            imagePath:
+                'assets/images/new/智慧校园/班主任/查寝动态.png',
           ),
           SmartCampusQuickActionData(
             label: '查寝历史',

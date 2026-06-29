@@ -218,9 +218,13 @@ List<HeadTeacherBoardItem> buildHeadTeacherRecentBoardItems(
   return items;
 }
 
-Map<String, int> buildHeadTeacherActionBadges(HeadTeacherIndexRes res) {
+Map<String, int> buildHeadTeacherActionBadges(
+  HeadTeacherIndexRes res, {
+  int myLeavePendingCount = 0,
+}) {
   return <String, int>{
     '请假审批': res.pendingLeaveCount,
+    '我的请假': myLeavePendingCount,
     '家校沟通': res.chatUnreadCount + res.chatWaitingCount,
   };
 }

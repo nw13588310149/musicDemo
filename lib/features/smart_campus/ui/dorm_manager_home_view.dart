@@ -10,8 +10,10 @@ import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/state/shell_controller.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/dormitory_check_data.dart';
+import '../data/smart_campus_count_badge.dart';
 import '../state/dormitory_manager_controller.dart';
 import '../data/teacher_notice_data.dart';
+import '../state/smart_campus_controller.dart';
 import '../state/smart_campus_state.dart';
 import 'widgets/role_switcher_buttons.dart';
 import 'widgets/smart_campus_avatar_role_badge.dart';
@@ -60,7 +62,7 @@ class DormManagerHomeView extends ConsumerStatefulWidget {
     this.onOpenDormCheckHistory,
     this.onOpenCheckInManagement,
     this.onOpenDormManagerLeave,
-    this.onOpenDormMakeupAudit,
+    this.onOpenDormDynamic,
   });
 
   final String shellDisplayName;
@@ -89,7 +91,7 @@ class DormManagerHomeView extends ConsumerStatefulWidget {
   final VoidCallback? onOpenDormCheckHistory;
   final VoidCallback? onOpenCheckInManagement;
   final VoidCallback? onOpenDormManagerLeave;
-  final VoidCallback? onOpenDormMakeupAudit;
+  final VoidCallback? onOpenDormDynamic;
 
   @override
   ConsumerState<DormManagerHomeView> createState() =>
@@ -108,7 +110,39 @@ class _DormManagerHomeViewState extends ConsumerState<DormManagerHomeView> {
   }
 
   @override
+  void reassemble() {
+    super.reassemble();
+    assert(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          unawaited(
+            ref
+                .read(dormitoryManagerControllerProvider.notifier)
+                .loadHome(silent: true),
+          );
+        }
+      });
+      return true;
+    }());
+  }
+
+  @override
   Widget build(BuildContext context) {
+    ref.listen<int>(
+      smartCampusControllerProvider.select((s) => s.dashboardRefreshEpoch),
+      (previous, next) {
+        if (previous == null || previous == next) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          unawaited(
+            ref
+                .read(dormitoryManagerControllerProvider.notifier)
+                .loadHome(silent: true),
+          );
+        });
+      },
+    );
+
     final ui = DashboardScaleScope.of(context).ui;
     final managerState = ref.watch(dormitoryManagerControllerProvider);
     final index = managerState.index;
@@ -135,8 +169,8 @@ class _DormManagerHomeViewState extends ConsumerState<DormManagerHomeView> {
 
           final mainColumn = _DormMainColumn(
             index: index,
+            teacherLeavePendingCount: managerState.teacherLeavePendingCount,
             fillRemaining: !isCompact,
-            onOpenPending: widget.onOpenDormMakeupAudit,
             onOpenGroupChat: widget.onOpenGroupChat,
             onOpenPrincipalMailbox: widget.onOpenPrincipalMailbox,
             onOpenSchoolCircle: widget.onOpenSchoolCircle,
@@ -144,6 +178,7 @@ class _DormManagerHomeViewState extends ConsumerState<DormManagerHomeView> {
             onOpenDormCheckHistory: widget.onOpenDormCheckHistory,
             onOpenCheckInManagement: widget.onOpenCheckInManagement,
             onOpenDormManagerLeave: widget.onOpenDormManagerLeave,
+            onOpenDormDynamic: widget.onOpenDormDynamic,
           );
 
           final sidePanel = _DormManagerSidePanel(
@@ -200,8 +235,8 @@ class _DormManagerHomeViewState extends ConsumerState<DormManagerHomeView> {
 class _DormMainColumn extends StatelessWidget {
   const _DormMainColumn({
     required this.index,
+    required this.teacherLeavePendingCount,
     required this.fillRemaining,
-    this.onOpenPending,
     this.onOpenGroupChat,
     this.onOpenPrincipalMailbox,
     this.onOpenSchoolCircle,
@@ -209,11 +244,12 @@ class _DormMainColumn extends StatelessWidget {
     this.onOpenDormCheckHistory,
     this.onOpenCheckInManagement,
     this.onOpenDormManagerLeave,
+    this.onOpenDormDynamic,
   });
 
   final DormitoryIndexOverview index;
+  final int teacherLeavePendingCount;
   final bool fillRemaining;
-  final VoidCallback? onOpenPending;
   final VoidCallback? onOpenGroupChat;
   final VoidCallback? onOpenPrincipalMailbox;
   final VoidCallback? onOpenSchoolCircle;
@@ -221,6 +257,7 @@ class _DormMainColumn extends StatelessWidget {
   final VoidCallback? onOpenDormCheckHistory;
   final VoidCallback? onOpenCheckInManagement;
   final VoidCallback? onOpenDormManagerLeave;
+  final VoidCallback? onOpenDormDynamic;
 
   @override
   Widget build(BuildContext context) {
@@ -237,9 +274,10 @@ class _DormMainColumn extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.max,
         children: [
-          _DormStatsRow(index: index, onOpenPending: onOpenPending),
+          _DormStatsRow(index: index),
           SizedBox(height: ui(16)),
           _DormQuickActionsCard(
+            teacherLeavePendingCount: teacherLeavePendingCount,
             onOpenGroupChat: onOpenGroupChat,
             onOpenPrincipalMailbox: onOpenPrincipalMailbox,
             onOpenSchoolCircle: onOpenSchoolCircle,
@@ -247,6 +285,7 @@ class _DormMainColumn extends StatelessWidget {
             onOpenDormCheckHistory: onOpenDormCheckHistory,
             onOpenCheckInManagement: onOpenCheckInManagement,
             onOpenDormManagerLeave: onOpenDormManagerLeave,
+            onOpenDormDynamic: onOpenDormDynamic,
           ),
           SizedBox(height: ui(16)),
           Expanded(child: dutySection),
@@ -258,9 +297,10 @@ class _DormMainColumn extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _DormStatsRow(index: index, onOpenPending: onOpenPending),
+        _DormStatsRow(index: index),
         SizedBox(height: ui(16)),
         _DormQuickActionsCard(
+          teacherLeavePendingCount: teacherLeavePendingCount,
           onOpenGroupChat: onOpenGroupChat,
           onOpenPrincipalMailbox: onOpenPrincipalMailbox,
           onOpenSchoolCircle: onOpenSchoolCircle,
@@ -384,6 +424,10 @@ const _dormQuickActions = <_QuickAction>[
     'assets/images/new/智慧校园/宿管/按宿舍查寝.png',
   ),
   _QuickAction(
+    '查寝动态',
+    'assets/images/new/智慧校园/班主任/查寝动态.png',
+  ),
+  _QuickAction(
     '查寝历史',
     'assets/images/new/智慧校园/宿管/查寝历史.png',
   ),
@@ -462,10 +506,9 @@ class _SectionTitle extends StatelessWidget {
 // ============================================================================
 
 class _DormStatsRow extends StatelessWidget {
-  const _DormStatsRow({required this.index, this.onOpenPending});
+  const _DormStatsRow({required this.index});
 
   final DormitoryIndexOverview index;
-  final VoidCallback? onOpenPending;
 
   @override
   Widget build(BuildContext context) {
@@ -495,7 +538,6 @@ class _DormStatsRow extends StatelessWidget {
             child: _PendingCard(
               value: '${index.pendingMakeupCount}',
               label: '待审补卡',
-              onTap: onOpenPending,
             ),
           ),
         ],
@@ -546,53 +588,48 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-/// 「待处理」紫高亮卡：24/500 紫色数值 + 12 灰色文案，居中布局。
+/// 「待审补卡」紫高亮卡：仅展示统计，不可点击跳转。
 class _PendingCard extends StatelessWidget {
-  const _PendingCard({required this.value, required this.label, this.onTap});
+  const _PendingCard({required this.value, required this.label});
 
   final String value;
   final String label;
-  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(16)),
-      child: SmartCampusHomeCard(
-        padding: EdgeInsets.symmetric(horizontal: ui(8), vertical: ui(8)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: Center(
-                child: Text(
-                  value,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: smartCampusStatValueTextStyle(
-                    ui,
-                    color: const Color(0xFF8741FF),
-                  ),
+    return SmartCampusHomeCard(
+      padding: EdgeInsets.symmetric(horizontal: ui(8), vertical: ui(8)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Center(
+              child: Text(
+                value,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: smartCampusStatValueTextStyle(
+                  ui,
+                  color: const Color(0xFF8741FF),
                 ),
               ),
             ),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: ui(12),
-                height: 1.0,
-                color: const Color(0xFF6D6B75),
-                fontFamily: 'PingFang SC',
-              ),
+          ),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: ui(12),
+              height: 1.0,
+              color: const Color(0xFF6D6B75),
+              fontFamily: 'PingFang SC',
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -604,6 +641,7 @@ class _PendingCard extends StatelessWidget {
 
 class _DormQuickActionsCard extends StatelessWidget {
   const _DormQuickActionsCard({
+    this.teacherLeavePendingCount = 0,
     this.onOpenGroupChat,
     this.onOpenPrincipalMailbox,
     this.onOpenSchoolCircle,
@@ -611,6 +649,7 @@ class _DormQuickActionsCard extends StatelessWidget {
     this.onOpenDormCheckHistory,
     this.onOpenCheckInManagement,
     this.onOpenDormManagerLeave,
+    this.onOpenDormDynamic,
   });
 
   final VoidCallback? onOpenGroupChat;
@@ -620,6 +659,8 @@ class _DormQuickActionsCard extends StatelessWidget {
   final VoidCallback? onOpenDormCheckHistory;
   final VoidCallback? onOpenCheckInManagement;
   final VoidCallback? onOpenDormManagerLeave;
+  final VoidCallback? onOpenDormDynamic;
+  final int teacherLeavePendingCount;
 
   VoidCallback? _resolveTap(String label) {
     switch (label) {
@@ -631,6 +672,8 @@ class _DormQuickActionsCard extends StatelessWidget {
         return onOpenSchoolCircle;
       case '按宿舍查寝':
         return onOpenDormCheckByRoom;
+      case '查寝动态':
+        return onOpenDormDynamic;
       case '查寝历史':
         return onOpenDormCheckHistory;
       case '打卡管理':
@@ -649,6 +692,9 @@ class _DormQuickActionsCard extends StatelessWidget {
           SmartCampusQuickActionItem(
             label: action.label,
             assetPath: action.iconAsset,
+            badgeLabel: action.label == '宿管请假'
+                ? smartCampusCountBadgeLabel(teacherLeavePendingCount)
+                : null,
             onTap: _resolveTap(action.label),
           ),
       ],

@@ -116,6 +116,12 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
     Navigator.pushNamed(context, RoutePaths.smartCampus);
   }
 
+  /// 跳转到智慧校园「校圈」子页，与群聊同样只占 Shell 主内容区。
+  void _openSchoolCircle() {
+    ref.read(smartCampusControllerProvider.notifier).openSchoolCircle();
+    Navigator.pushNamed(context, RoutePaths.smartCampus);
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = widget.state;
@@ -501,6 +507,10 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
   void _onQuickActionTap(HomeQuickAction action) {
     if (action.route == RoutePaths.smartCampus) {
       _openGroupChat();
+      return;
+    }
+    if (action.route == RoutePaths.circle) {
+      _openSchoolCircle();
       return;
     }
     Navigator.pushNamed(

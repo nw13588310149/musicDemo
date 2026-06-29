@@ -29,6 +29,7 @@ class DormitoryManagerState {
     this.submittingStudentIds = const {},
     this.submittingMakeupIds = const {},
     this.submittingExceptionIds = const {},
+    this.teacherLeavePendingCount = 0,
   });
 
   final bool loadingHome;
@@ -57,6 +58,9 @@ class DormitoryManagerState {
   final Set<String> submittingStudentIds;
   final Set<String> submittingMakeupIds;
   final Set<String> submittingExceptionIds;
+
+  /// 「宿管请假」待审批条数（`teacherLeaveList` · `status: 0`）。
+  final int teacherLeavePendingCount;
 
   DormitoryManagerState copyWith({
     bool? loadingHome,
@@ -87,6 +91,7 @@ class DormitoryManagerState {
     Set<String>? submittingStudentIds,
     Set<String>? submittingMakeupIds,
     Set<String>? submittingExceptionIds,
+    int? teacherLeavePendingCount,
   }) {
     return DormitoryManagerState(
       loadingHome: loadingHome ?? this.loadingHome,
@@ -120,6 +125,8 @@ class DormitoryManagerState {
       submittingMakeupIds: submittingMakeupIds ?? this.submittingMakeupIds,
       submittingExceptionIds:
           submittingExceptionIds ?? this.submittingExceptionIds,
+      teacherLeavePendingCount:
+          teacherLeavePendingCount ?? this.teacherLeavePendingCount,
     );
   }
 }

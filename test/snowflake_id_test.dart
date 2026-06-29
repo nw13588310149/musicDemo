@@ -45,6 +45,21 @@ void main() {
     expect(body, isNot(contains('"id":$classId')));
   });
 
+  test('preserves 19-digit schoolId digits in numeric JSON literal', () {
+    const schoolId = '2066563244679475201';
+    final body = encodeNumericIdRequestBody(
+      <String, dynamic>{
+        'schoolId': schoolId,
+        'content': 'test',
+      },
+      numericIdKeys: const {'schoolId'},
+    );
+
+    expect(body, isNotNull);
+    expect(body!, contains('"schoolId":$schoolId'));
+    expect(body, isNot(contains('2066563244679475200')));
+  });
+
   test('rejects invalid numeric id fields', () {
     final body = encodeNumericIdRequestBody(
       <String, dynamic>{'examId': 'not-an-id'},

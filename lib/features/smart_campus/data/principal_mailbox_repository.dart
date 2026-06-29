@@ -23,8 +23,8 @@ import '../../../core/storage/app_storage.dart';
 ///   - `feedbackSave`            提交意见反馈
 ///
 /// 请求头 `app-token` / `schoolId` 由 [ApiClient] 统一注入；校长信箱列表
-/// 接口无须单独传 `schoolId`，校长信箱提交接口按 Swagger 仍要求 body 带
-/// `schoolId`，这里从 [AppStorage] 读取后自动塞入，调用方只需传业务字段。
+/// 接口无须单独传 `schoolId`，提交接口 body 的 `schoolId` 与请求头同源：
+/// SharedPreferences 字符串缓存（Web 为 `flutter.schoolId`）。
 /// 意见反馈接口与学校无关，仅需 token 即可。
 final principalMailboxRepositoryProvider = Provider<PrincipalMailboxRepository>(
   (ref) {
@@ -71,25 +71,27 @@ class PrincipalMailboxRepository {
   /// - [msgType]      消息类型，例：举报 / 建议 / 其他
   /// - [isAnonymous]  是否匿名：0 否 / 1 是
   /// - [attachments]  附件 URL，多个用英文逗号分隔；无附件传空串
-  /// - [schoolId]     学校 id；不传则从 [AppStorage] 自动取值
+  ///
+  /// `schoolId` 固定读 SharedPreferences 缓存（Web 本地键为 `flutter.schoolId`），
+  /// 手写 JSON 字符串提交，避免 Map 序列化时雪花 id 被转成 null / 精度丢失。
   Future<ApiResponse> principalMailboxSubmit({
     required String content,
     required String msgType,
     int isAnonymous = 0,
     String attachments = '',
-    int? schoolId,
   }) {
-    final sid = schoolId ?? int.tryParse(storage.schoolId) ?? 0;
-    return client.post(
-      '$_base/principalMailboxSubmit',
-      data: <String, dynamic>{
-        'attachments': attachments,
-        'content': content,
-        'isAnonymous': isAnonymous,
-        'msgType': msgType,
-        'schoolId': sid,
-      },
-    );
+    final sid = storage.schoolId.trim();
+    if (sid.isEmpty || sid == '0') {
+      return Future.value(ApiResponse.failure('未绑定学校'));
+    }
+    final encoded = encodeSnowflakeSafeRequestBody(<String, dynamic>{
+      'attachments': attachments,
+      'content': content,
+      'isAnonymous': isAnonymous,
+      'msgType': msgType,
+      'schoolId': sid,
+    });
+    return client.post('$_base/principalMailboxSubmit', data: encoded);
   }
 
   /// 校长端：查看来信列表。

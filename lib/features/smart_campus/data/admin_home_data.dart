@@ -25,7 +25,7 @@ class AdminHomeSummary {
   final int postStatus0Count;
 
   factory AdminHomeSummary.fromJson(dynamic raw) {
-    final json = raw is Map ? Map<String, dynamic>.from(raw) : const {};
+    final json = _coerceIndexSumMap(raw);
     return AdminHomeSummary(
       studentCount: _readInt(json['studentCount']),
       teacherCount: _readInt(json['teacherCount']),
@@ -39,6 +39,97 @@ class AdminHomeSummary {
       postStatus0Count: _readInt(json['postStatus0Count']),
     );
   }
+}
+
+/// 管理员首页快捷入口角标数量（与顶部统计 / 分页 total 对齐）。
+class AdminHomeActionBadgeCounts {
+  const AdminHomeActionBadgeCounts({
+    this.scheduleApply = 0,
+    this.teacherLeave = 0,
+    this.signReview = 0,
+    this.faceAudit = 0,
+    this.postReview = 0,
+    this.principalMailboxPending = 0,
+  });
+
+  /// 排课与课表：`schoolSmallCourseApplyList` status=0 total。
+  final int scheduleApply;
+
+  /// 教师请假审批：`indexSum.leaveStatus0Count`（教职工待审批请假）。
+  final int teacherLeave;
+
+  /// 签课管理：`indexSum.smallCourseSignStatus5Count`（小课待审核）。
+  final int signReview;
+
+  /// 人脸库：`schoolUserFaceSum.status0Count`（待审核）。
+  final int faceAudit;
+
+  /// 校圈治理：`indexSum.postStatus0Count`（今日校圈）。
+  final int postReview;
+
+  /// 校长信箱：`headmaster/principalMailboxList` status=0 total（待回复）。
+  final int principalMailboxPending;
+
+  factory AdminHomeActionBadgeCounts.fromSummary({
+    required AdminHomeSummary summary,
+    required int scheduleApply,
+    required int faceAudit,
+    int principalMailboxPending = 0,
+  }) {
+    return AdminHomeActionBadgeCounts(
+      scheduleApply: scheduleApply,
+      teacherLeave: summary.leaveStatus0Count,
+      signReview: summary.smallCourseSignStatus5Count,
+      faceAudit: faceAudit,
+      postReview: summary.postStatus0Count,
+      principalMailboxPending: principalMailboxPending,
+    );
+  }
+
+  String? badgeLabelFor(String actionLabel) {
+    switch (actionLabel) {
+      case '排课与课表':
+        return smartCampusCountBadgeLabel(scheduleApply);
+      case '教师请假审批':
+        return smartCampusCountBadgeLabel(teacherLeave);
+      case '签课管理':
+        return smartCampusCountBadgeLabel(signReview);
+      case '人脸库':
+        return smartCampusCountBadgeLabel(faceAudit);
+      case '校圈治理':
+        return smartCampusCountBadgeLabel(postReview);
+      case '校长信箱':
+        return smartCampusCountBadgeLabel(principalMailboxPending);
+      default:
+        return null;
+    }
+  }
+}
+
+Map<String, dynamic> _coerceIndexSumMap(dynamic raw) {
+  var current = raw;
+  for (var depth = 0; depth < 4; depth++) {
+    if (current is! Map) return const {};
+    final map = Map<String, dynamic>.from(current);
+    if (_looksLikeIndexSumRes(map)) return map;
+    if (map['data'] is Map) {
+      current = map['data'];
+      continue;
+    }
+    return map;
+  }
+  return const {};
+}
+
+bool _looksLikeIndexSumRes(Map<String, dynamic> json) {
+  const keys = [
+    'studentCount',
+    'leaveStatus0Count',
+    'postStatus0Count',
+    'smallCourseSignStatus5Count',
+    'toDoTodayCount',
+  ];
+  return keys.any(json.containsKey);
 }
 
 class AdminHomeNotice {
@@ -88,7 +179,12 @@ class AdminHomeWorkReminder {
   final String subtitle;
 
   factory AdminHomeWorkReminder.fromJson(Map<String, dynamic> json) {
-    final tag = _pickString(json, const ['tag', 'type', 'label', 'badge'], '预警');
+    final tag = _pickString(json, const [
+      'tag',
+      'type',
+      'label',
+      'badge',
+    ], '预警');
     final title = _pickString(json, const [
       'title',
       'name',
@@ -177,15 +273,7 @@ class AdminHomeLoginChartPoint {
   final String weekdayLabel;
 }
 
-const _adminHomeWeekdayLabels = [
-  '周一',
-  '周二',
-  '周三',
-  '周四',
-  '周五',
-  '周六',
-  '周日',
-];
+const _adminHomeWeekdayLabels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
 AdminHomeLoginChart parseAdminHomeLoginChart(
   dynamic raw, {
@@ -206,7 +294,11 @@ AdminHomeLoginChart parseAdminHomeLoginChart(
   }
 
   final points = <AdminHomeLoginChartPoint>[];
-  for (var day = start; !day.isAfter(end); day = day.add(const Duration(days: 1))) {
+  for (
+    var day = start;
+    !day.isAfter(end);
+    day = day.add(const Duration(days: 1))
+  ) {
     final iso = formatAdminHomeIsoDate(day);
     points.add(
       AdminHomeLoginChartPoint(
@@ -256,8 +348,7 @@ List<String> buildAdminHomeLoginChartYLabels(double maxY) {
   final top = maxY <= 0 ? 10 : maxY;
   final step = top / 5;
   return [
-    for (var i = 5; i >= 0; i--)
-      i == 0 ? '0' : (step * i).round().toString(),
+    for (var i = 5; i >= 0; i--) i == 0 ? '0' : (step * i).round().toString(),
   ];
 }
 
@@ -311,27 +402,56 @@ int _readInt(dynamic raw) {
 
 /// 分页接口 `total` / `totalCount` 等字段（小课申请待审核角标等）。
 int? parseAdminPageTotal(dynamic raw) {
-  var data = raw;
-  if (data is Map && data['data'] is Map) {
-    data = data['data'];
-  }
-  if (data is! Map) return null;
-  final m = Map<String, dynamic>.from(data);
-  for (final key in ['total', 'totalCount', 'recordsTotal', 'count']) {
-    final v = m[key];
-    if (v == null) continue;
-    if (v is int) return v;
-    final n = int.tryParse(v.toString());
-    if (n != null) return n;
+  var current = raw;
+  for (var depth = 0; depth < 4; depth++) {
+    if (current is! Map) return null;
+    final map = Map<String, dynamic>.from(current);
+    for (final key in ['total', 'totalCount', 'recordsTotal', 'count']) {
+      final value = map[key];
+      if (value == null) continue;
+      if (value is int) return value;
+      final parsed = int.tryParse(value.toString());
+      if (parsed != null) return parsed;
+    }
+    final nested = map['data'];
+    if (nested is! Map) return null;
+    current = nested;
   }
   return null;
 }
 
-Map<String, String?> buildAdminQuickActionBadges({
-  required int pendingSmallCourseApplyCount,
-}) {
-  return {
-    '排课与课表': smartCampusCountBadgeLabel(pendingSmallCourseApplyCount),
-  };
+/// 人脸库统计 `schoolUserFaceSum` → 待审核数量（`status0Count`）。
+int parseAdminFaceSumPendingCount(dynamic raw) {
+  var current = raw;
+  for (var depth = 0; depth < 4; depth++) {
+    if (current is! Map) return 0;
+    final map = Map<String, dynamic>.from(current);
+    if (map.containsKey('status0Count')) {
+      return _readInt(map['status0Count']);
+    }
+    final nested = map['data'];
+    if (nested is! Map) return 0;
+    current = nested;
+  }
+  return 0;
 }
 
+int parseAdminListPendingTotal(dynamic raw) {
+  final total = parseAdminPageTotal(raw);
+  if (total != null) return total;
+
+  var current = raw;
+  for (var depth = 0; depth < 4; depth++) {
+    if (current is List) return current.length;
+    if (current is! Map) return 0;
+    final map = Map<String, dynamic>.from(current);
+    for (final key in ['records', 'list', 'rows', 'items']) {
+      final rows = map[key];
+      if (rows is List) return rows.length;
+    }
+    final nested = map['data'];
+    if (nested is! Map && nested is! List) return 0;
+    current = nested;
+  }
+  return 0;
+}

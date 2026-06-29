@@ -35,11 +35,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
 import '../../../core/constants/app_assets.dart';
+import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/widgets/app_refresh_indicator.dart';
+import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/image_gallery_viewer.dart';
 import '../../../core/widgets/scaled_dialog.dart';
+import '../../../core/providers/app_providers.dart';
+import '../../../core/widgets/wechat_emoji.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../../shell/state/shell_controller.dart';
 import 'widgets/smart_campus_stat_card.dart';
 import '../data/home_school_chat_data.dart';
 import '../data/smart_campus_count_badge.dart';
@@ -726,7 +732,7 @@ class _ConversationCard extends StatelessWidget {
                         ),
                         SizedBox(height: ui(4)),
                         Text(
-                          '${conversation.displayParentName}（${conversation.parentRelation}）',
+                          conversation.displayParentLine,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -1134,6 +1140,10 @@ class _ChatDetailDialogState extends ConsumerState<_ChatDetailDialog> {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final shellUser = ref.watch(shellControllerProvider).user;
+    final teacherName =
+        widget.conversation.displayTeacherName(shellUser.displayName);
+    final teacherHeadUrl = MediaUrl.resolve(shellUser.avatarUrl);
     final maxH = MediaQuery.sizeOf(context).height * 0.82;
     return Center(
       child: Material(
@@ -1174,14 +1184,38 @@ class _ChatDetailDialogState extends ConsumerState<_ChatDetailDialog> {
                               ),
                             ),
                           )
-                        : ListView.builder(
-                            controller: _scrollController,
-                            padding: EdgeInsets.only(bottom: ui(8)),
-                            itemCount: _messages.length,
-                            itemBuilder: (context, index) {
-                              return Padding(
+                        : Builder(
+                            builder: (context) {
+                              final galleryImages = <String>[
+                                for (final m in _messages)
+                                  if (m.isImage &&
+                                      (m.imageUrl?.isNotEmpty ?? false))
+                                    m.imageUrl!,
+                              ];
+                              return ListView.builder(
+                                controller: _scrollController,
                                 padding: EdgeInsets.only(bottom: ui(8)),
-                                child: _ChatBubble(message: _messages[index]),
+                                itemCount: _messages.length,
+                                itemBuilder: (context, index) {
+                                  final message = _messages[index];
+                                  final galleryIndex = message.isImage &&
+                                          message.imageUrl != null
+                                      ? galleryImages.indexOf(message.imageUrl!)
+                                      : -1;
+                                  return Padding(
+                                    padding: EdgeInsets.only(bottom: ui(8)),
+                                    child: _ChatBubble(
+                                      message: message,
+                                      conversation: widget.conversation,
+                                      teacherName: teacherName,
+                                      teacherHeadUrl: teacherHeadUrl.isNotEmpty
+                                          ? teacherHeadUrl
+                                          : null,
+                                      galleryImages: galleryImages,
+                                      galleryIndex: galleryIndex,
+                                    ),
+                                  );
+                                },
                               );
                             },
                           ),
@@ -1326,9 +1360,11 @@ class _DialogHeader extends StatelessWidget {
                   child: _HomeSchoolAvatar(
                     size: ui(32),
                     headUrl: conversation.parentHeadUrl,
-                    fallbackInitial: conversation.parentRelation.isNotEmpty
-                        ? conversation.parentRelation.characters.first
-                        : '家',
+                    fallbackInitial: conversation.displayParentName.isNotEmpty
+                        ? conversation.displayParentName.characters.first
+                        : (conversation.parentRelation.isNotEmpty
+                              ? conversation.parentRelation.characters.first
+                              : '家'),
                     circular: true,
                   ),
                 ),
@@ -1336,7 +1372,7 @@ class _DialogHeader extends StatelessWidget {
               SizedBox(width: ui(8)),
               Expanded(
                 child: Text(
-                  '${conversation.parentRelation}-${conversation.displayParentName}',
+                  conversation.displayParentChatLabel,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -1375,18 +1411,6 @@ TextStyle _homeSchoolChatLineStyle(
   );
 }
 
-bool _isHomeSchoolEmojiCluster(String cluster) {
-  for (final rune in cluster.runes) {
-    if ((rune >= 0x1F000 && rune <= 0x1FAFF) ||
-        (rune >= 0x2600 && rune <= 0x27BF) ||
-        (rune >= 0xFE00 && rune <= 0xFE0F) ||
-        rune == 0x200D) {
-      return true;
-    }
-  }
-  return false;
-}
-
 StrutStyle _homeSchoolChatStrutStyle(TextStyle baseStyle) {
   return StrutStyle(
     fontSize: baseStyle.fontSize,
@@ -1403,43 +1427,134 @@ List<InlineSpan> _homeSchoolChatTextSpans(
   TextStyle baseStyle,
   double Function(double) ui,
 ) {
-  final evenStyle = baseStyle.copyWith(
-    leadingDistribution: TextLeadingDistribution.even,
+  return buildWechatEmojiTextSpans(
+    text: text,
+    baseStyle: baseStyle.copyWith(
+      leadingDistribution: TextLeadingDistribution.even,
+    ),
+    emojiSize: ui(18),
   );
-  final baseSize = evenStyle.fontSize ?? ui(12);
-  return [
-    for (final cluster in text.characters)
-      if (_isHomeSchoolEmojiCluster(cluster))
-        WidgetSpan(
-          alignment: PlaceholderAlignment.middle,
-          style: evenStyle,
-          child: Text(
-            cluster,
-            style: TextStyle(
-              inherit: false,
-              fontSize: baseSize,
-              height: evenStyle.height,
-              leadingDistribution: TextLeadingDistribution.even,
-            ),
-          ),
-        )
-      else
-        TextSpan(
-          text: cluster,
-          style: evenStyle,
-        ),
-  ];
 }
 
 class _ChatBubble extends StatelessWidget {
-  const _ChatBubble({required this.message});
+  const _ChatBubble({
+    required this.message,
+    required this.conversation,
+    required this.teacherName,
+    required this.teacherHeadUrl,
+    required this.galleryImages,
+    required this.galleryIndex,
+  });
 
   final HomeSchoolChatMessage message;
+  final HomeSchoolConversation conversation;
+  final String teacherName;
+  final String? teacherHeadUrl;
+  final List<String> galleryImages;
+  final int galleryIndex;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final fromTeacher = message.fromTeacher;
+    final senderName = fromTeacher
+        ? teacherName
+        : conversation.displayParentName;
+    final senderHeadUrl =
+        fromTeacher ? teacherHeadUrl : conversation.parentHeadUrl;
+    final fallbackInitial = senderName.isNotEmpty
+        ? senderName.characters.first
+        : (fromTeacher ? '师' : '家');
+    final avatar = _HomeSchoolAvatar(
+      size: ui(36),
+      headUrl: senderHeadUrl,
+      fallbackInitial: fallbackInitial,
+      borderRadius: ui(8),
+    );
+    final messageBody = message.isImage
+        ? _HomeSchoolImageBubble(
+            imageUrl: message.imageUrl,
+            galleryImages: galleryImages,
+            galleryIndex: galleryIndex,
+          )
+        : _HomeSchoolTextBubble(content: message.content, fromTeacher: fromTeacher);
+    final nameMeta = Padding(
+      padding: EdgeInsets.only(bottom: ui(4)),
+      child: Align(
+        alignment: fromTeacher ? Alignment.centerRight : Alignment.centerLeft,
+        child: Text(
+          senderName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: ui(12),
+            color: _kTextSecondary,
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w400,
+            height: 1.0,
+          ),
+        ),
+      ),
+    );
+    final timeLabel = Text(
+      message.timeText,
+      style: TextStyle(
+        fontSize: ui(12),
+        color: _kTextHintLight,
+        fontFamily: 'PingFang SC',
+        fontWeight: AppFont.w400,
+        height: 1.0,
+      ),
+    );
+    final bubbleWithTime = Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: fromTeacher
+          ? [
+              timeLabel,
+              SizedBox(width: ui(6)),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: ui(280)),
+                child: messageBody,
+              ),
+            ]
+          : [
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: ui(280)),
+                child: messageBody,
+              ),
+              SizedBox(width: ui(6)),
+              timeLabel,
+            ],
+    );
+    final textColumn = Column(
+      crossAxisAlignment:
+          fromTeacher ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [nameMeta, bubbleWithTime],
+    );
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment:
+          fromTeacher ? MainAxisAlignment.end : MainAxisAlignment.start,
+      children: fromTeacher
+          ? [Flexible(child: textColumn), SizedBox(width: ui(10)), avatar]
+          : [avatar, SizedBox(width: ui(10)), Flexible(child: textColumn)],
+    );
+  }
+}
+
+class _HomeSchoolTextBubble extends StatelessWidget {
+  const _HomeSchoolTextBubble({
+    required this.content,
+    required this.fromTeacher,
+  });
+
+  final String content;
+  final bool fromTeacher;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
     final baseStyle = TextStyle(
       fontSize: ui(13),
       color: fromTeacher ? Colors.white : _kTextDark,
@@ -1448,52 +1563,128 @@ class _ChatBubble extends StatelessWidget {
       height: 1.7,
       leadingDistribution: TextLeadingDistribution.even,
     );
-    return Align(
-      alignment: fromTeacher ? Alignment.centerRight : Alignment.centerLeft,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: ui(332)),
-        child: Column(
-          crossAxisAlignment: fromTeacher
-              ? CrossAxisAlignment.end
-              : CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: ui(12),
-                vertical: ui(8),
-              ),
-              decoration: BoxDecoration(
-                color: fromTeacher ? _kPurple : _kCardGreyBg,
-                borderRadius: BorderRadius.circular(ui(8)),
-              ),
-              child: Text.rich(
-                TextSpan(
-                  style: baseStyle,
-                  children: _homeSchoolChatTextSpans(
-                    message.content,
-                    baseStyle,
-                    ui,
-                  ),
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: ui(12),
+        vertical: ui(8),
+      ),
+      decoration: BoxDecoration(
+        color: fromTeacher ? _kPurple : _kCardGreyBg,
+        borderRadius: BorderRadius.circular(ui(8)),
+      ),
+      child: Text.rich(
+        TextSpan(
+          style: baseStyle,
+          children: _homeSchoolChatTextSpans(
+            content,
+            baseStyle,
+            ui,
+          ),
+        ),
+        strutStyle: _homeSchoolChatStrutStyle(baseStyle),
+        textHeightBehavior: const TextHeightBehavior(
+          applyHeightToFirstAscent: false,
+          applyHeightToLastDescent: false,
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeSchoolImageBubble extends ConsumerWidget {
+  const _HomeSchoolImageBubble({
+    required this.imageUrl,
+    required this.galleryImages,
+    required this.galleryIndex,
+  });
+
+  final String? imageUrl;
+  final List<String> galleryImages;
+  final int galleryIndex;
+
+  static const _heroTagPrefix = 'home_school_chat_img';
+
+  Map<String, String> _imageHeaders(WidgetRef ref) {
+    final token = ref.read(appStorageProvider).token.trim();
+    if (token.isEmpty) return const {};
+    return {'app-token': token};
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final size = ui(180);
+    final radius = BorderRadius.circular(ui(8));
+    final url = imageUrl?.trim() ?? '';
+    final headers = _imageHeaders(ref);
+
+    Widget placeholder({Widget? child}) {
+      return SizedBox(
+        width: size,
+        height: size,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: _kCardGreyBg,
+            borderRadius: radius,
+          ),
+          child: Center(
+            child: child ??
+                Icon(
+                  Icons.broken_image_outlined,
+                  color: _kTextSecondary,
+                  size: ui(32),
                 ),
-                strutStyle: _homeSchoolChatStrutStyle(baseStyle),
-                textHeightBehavior: const TextHeightBehavior(
-                  applyHeightToFirstAscent: false,
-                  applyHeightToLastDescent: false,
-                ),
-              ),
+          ),
+        ),
+      );
+    }
+
+    if (url.isEmpty) {
+      return placeholder();
+    }
+
+    final heroIndex = galleryIndex >= 0 ? galleryIndex : 0;
+    final heroTag = '${_heroTagPrefix}_${url}_$heroIndex';
+    return GestureDetector(
+      onTap: () {
+        if (galleryImages.isEmpty) {
+          showImageGallery(
+            context,
+            images: [url],
+            initialIndex: 0,
+            heroTagPrefix: _heroTagPrefix,
+          );
+          return;
+        }
+        showImageGallery(
+          context,
+          images: galleryImages,
+          initialIndex: heroIndex,
+          heroTagPrefix: _heroTagPrefix,
+        );
+      },
+      child: Hero(
+        tag: heroTag,
+        child: ClipRRect(
+          borderRadius: radius,
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: Image.network(
+              url,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              headers: headers,
+              gaplessPlayback: true,
+              filterQuality: FilterQuality.medium,
+              loadingBuilder: (context, child, progress) {
+                if (progress == null) return child;
+                return placeholder(child: const AppLoadingIndicator());
+              },
+              errorBuilder: (_, _, _) => placeholder(),
             ),
-            SizedBox(height: ui(4)),
-            Text(
-              message.timeText,
-              style: TextStyle(
-                fontSize: ui(12),
-                color: _kTextHintLight,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w400,
-                height: 1.0,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

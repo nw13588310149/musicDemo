@@ -1278,49 +1278,84 @@ class _Banner extends StatelessWidget {
 class _BannerSegment extends StatelessWidget {
   const _BannerSegment({required this.currentTab, required this.onSelectTab});
 
+  static const Duration _duration = Duration(milliseconds: 180);
+  static const Curve _curve = Curves.easeOut;
+
   final _FaceTab currentTab;
   final ValueChanged<_FaceTab> onSelectTab;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      // minHeight 而不是 fixed height：避免中文字 height:1 被切顶。
-      constraints: BoxConstraints(minHeight: ui(32)),
-      padding: EdgeInsets.all(ui(2)),
-      decoration: BoxDecoration(
-        color: _kPanelBg,
-        borderRadius: BorderRadius.circular(ui(8)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final t in _FaceTab.values)
-            InkWell(
-              onTap: () => onSelectTab(t),
-              borderRadius: BorderRadius.circular(ui(6)),
-              child: Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: ui(16),
-                  vertical: ui(7),
-                ),
-                decoration: BoxDecoration(
-                  color: t == currentTab ? _kTextDark : Colors.transparent,
-                  borderRadius: BorderRadius.circular(ui(6)),
-                ),
-                child: Text(
-                  t.label,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: t == currentTab ? Colors.white : _kTextHint,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: t == currentTab ? AppFont.w500 : AppFont.w400,
-                    height: 1.2,
+    final selectedIndex = currentTab == _FaceTab.enroll ? 0 : 1;
+    final thumbAlignX = selectedIndex == 0 ? -1.0 : 1.0;
+
+    return IntrinsicWidth(
+      child: Container(
+        // minHeight 而不是 fixed height：避免中文字 height:1 被切顶。
+        constraints: BoxConstraints(minHeight: ui(32)),
+        padding: EdgeInsets.all(ui(2)),
+        decoration: BoxDecoration(
+          color: _kPanelBg,
+          borderRadius: BorderRadius.circular(ui(8)),
+        ),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: AnimatedAlign(
+                duration: _duration,
+                curve: _curve,
+                alignment: Alignment(thumbAlignX, 0),
+                child: FractionallySizedBox(
+                  widthFactor: 0.5,
+                  heightFactor: 1,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: _kTextDark,
+                      borderRadius: BorderRadius.circular(ui(6)),
+                    ),
                   ),
                 ),
               ),
             ),
-        ],
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < _FaceTab.values.length; i++)
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => onSelectTab(_FaceTab.values[i]),
+                      behavior: HitTestBehavior.opaque,
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: ui(16),
+                          vertical: ui(7),
+                        ),
+                        child: Center(
+                          child: AnimatedDefaultTextStyle(
+                            duration: _duration,
+                            curve: _curve,
+                            style: TextStyle(
+                              fontSize: ui(12),
+                              color: i == selectedIndex
+                                  ? Colors.white
+                                  : _kTextHint,
+                              fontFamily: 'PingFang SC',
+                              fontWeight: i == selectedIndex
+                                  ? AppFont.w500
+                                  : AppFont.w400,
+                              height: 1.2,
+                            ),
+                            child: Text(_FaceTab.values[i].label),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1536,6 +1571,10 @@ class _StepCell extends StatelessWidget {
     required this.isLast,
   });
 
+  static const _dotSize = 24.0;
+  static const _lineHeight = 12.0;
+  static const _lineTop = 9.0;
+
   final String iconAsset;
   final String label;
   final bool isFirst;
@@ -1544,13 +1583,16 @@ class _StepCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    // 圆块垂直中心与横线中心对齐：lineTop + lineHeight/2 == dotTop + dotSize/2
+    final dotTop = _lineTop + (_lineHeight - _dotSize) / 2;
+
     return Stack(
       alignment: Alignment.topCenter,
       children: [
         Padding(
-          padding: EdgeInsets.only(top: ui(9)),
+          padding: EdgeInsets.only(top: ui(_lineTop)),
           child: Container(
-            height: ui(12),
+            height: ui(_lineHeight),
             decoration: BoxDecoration(
               color: _kStepBg,
               borderRadius: BorderRadius.horizontal(
@@ -1562,9 +1604,10 @@ class _StepCell extends StatelessWidget {
         ),
         Column(
           children: [
+            SizedBox(height: ui(dotTop)),
             Container(
-              width: ui(28),
-              height: ui(28),
+              width: ui(_dotSize),
+              height: ui(_dotSize),
               decoration: BoxDecoration(
                 color: _kPurple,
                 shape: BoxShape.circle,
@@ -1583,7 +1626,7 @@ class _StepCell extends StatelessWidget {
               label,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: ui(12),
+                fontSize: ui(10),
                 color: _kTextSecondary,
                 fontFamily: 'PingFang SC',
                 fontWeight: AppFont.w400,
@@ -2331,24 +2374,18 @@ class _StandardPanel extends StatelessWidget {
                     Expanded(
                       child: _SampleThumb(
                         asset: AppAssets.adminFaceLibraryStandardSample1,
-                        caption: '背景过于复杂',
-                        ok: false,
                       ),
                     ),
                     SizedBox(width: ui(10)),
                     Expanded(
                       child: _SampleThumb(
                         asset: AppAssets.adminFaceLibraryStandardSample2,
-                        caption: '光线不足/过曝',
-                        ok: false,
                       ),
                     ),
                     SizedBox(width: ui(10)),
                     Expanded(
                       child: _SampleThumb(
                         asset: AppAssets.adminFaceLibraryStandardSample3,
-                        caption: '双眼平视，双耳可见',
-                        ok: true,
                       ),
                     ),
                   ],
@@ -2374,15 +2411,9 @@ class _StandardPanel extends StatelessWidget {
 }
 
 class _SampleThumb extends StatelessWidget {
-  const _SampleThumb({
-    required this.asset,
-    required this.caption,
-    required this.ok,
-  });
+  const _SampleThumb({required this.asset});
 
   final String asset;
-  final String caption;
-  final bool ok;
 
   @override
   Widget build(BuildContext context) {
@@ -2391,57 +2422,7 @@ class _SampleThumb extends StatelessWidget {
       borderRadius: BorderRadius.circular(ui(8)),
       child: SizedBox(
         height: ui(86),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Container(color: _kPanelBg),
-            Image.asset(asset, fit: BoxFit.cover),
-            Positioned(
-              right: 0,
-              top: 0,
-              child: Container(
-                width: ui(17),
-                height: ui(16),
-                decoration: BoxDecoration(
-                  color: ok ? _kGreen : _kRed,
-                  borderRadius: BorderRadius.only(
-                    topRight: Radius.circular(ui(8)),
-                    bottomLeft: Radius.circular(ui(4)),
-                  ),
-                ),
-                alignment: Alignment.center,
-                child: Icon(
-                  ok ? Icons.check_rounded : Icons.close_rounded,
-                  size: ui(10),
-                  color: Colors.white,
-                ),
-              ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: Container(
-                height: ui(20),
-                color: const Color(0x80000000),
-                alignment: Alignment.center,
-                child: Text(
-                  caption,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: Colors.white,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 1.2,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
+        child: Image.asset(asset, fit: BoxFit.cover, width: double.infinity),
       ),
     );
   }

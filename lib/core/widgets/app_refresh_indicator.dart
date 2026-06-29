@@ -279,10 +279,7 @@ class _AppRefreshIndicatorState extends State<AppRefreshIndicator>
             left: 0,
             right: 0,
             child: SizeTransition(
-              alignment: AlignmentDirectional(
-                -1.0,
-                _isIndicatorAtTop! ? 1.0 : -1.0,
-              ),
+              axisAlignment: _isIndicatorAtTop! ? 1.0 : -1.0,
               sizeFactor: _positionFactor,
               child: Padding(
                 padding: _isIndicatorAtTop!

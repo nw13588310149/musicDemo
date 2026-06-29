@@ -832,4 +832,7 @@ abstract final class AppAssets {
   static const groupChatEmojiTab5Active = 'assets/images/groupChat/face5A.png';
   static const groupChatEmojiTab6 = 'assets/images/groupChat/face6.png';
   static const groupChatEmojiTab6Active = 'assets/images/groupChat/face6A.png';
+
+  /// 微信经典表情雪碧图（11×10）。
+  static const emojiSprite = 'assets/images/new/emoji-sprite.png';
 }

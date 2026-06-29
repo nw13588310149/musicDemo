@@ -10,6 +10,12 @@ BoxDecoration smartCampusPageBannerDecoration(
 }) {
   return BoxDecoration(
     borderRadius: BorderRadius.circular(ui(borderRadius)),
+    // 底图右缘曾带 1px 深色竖线；先铺渐变再 cover，避免拉伸后右侧露线。
+    gradient: const LinearGradient(
+      begin: Alignment.centerLeft,
+      end: Alignment.centerRight,
+      colors: [Colors.white, Color(0xFFF9EDFF)],
+    ),
     image: const DecorationImage(
       image: AssetImage(AppAssets.xiaoquanHeaderBg),
       fit: BoxFit.cover,

@@ -10,6 +10,7 @@ enum SmartCampusMainView {
   myHomework,
   myGrades,
   groupChat,
+  schoolCircle,
   leaveManagement,
   leaveApproval,
   myTeacherLeave,
@@ -51,7 +52,7 @@ class TeacherScheduleFocusTarget {
   final int lineNum;
 }
 
-/// 班主任首页待办点击「补卡 / 查寝」进入查寝动态页时的初始 tab。
+/// 宿管首页待办点击「补卡 / 查寝」进入查寝动态页时的初始 tab。
 enum TeacherDormDynamicInitialTab {
   classRoster,
   punchAudit,
@@ -199,6 +200,7 @@ class SmartCampusState {
       SmartCampusRole.admin,
       SmartCampusRole.principal,
     ],
+    this.dashboardRefreshEpoch = 0,
   });
 
   final SmartCampusRole selectedRole;
@@ -236,6 +238,9 @@ class SmartCampusState {
 
   final List<SmartCampusRole> availableRoles;
 
+  /// 从子页返回 dashboard 时递增；各端首页监听此值以重新拉取角标 / 统计。
+  final int dashboardRefreshEpoch;
+
   SmartCampusState copyWith({
     SmartCampusRole? selectedRole,
     bool? hasUserSelectedRole,
@@ -251,6 +256,7 @@ class SmartCampusState {
     TeacherDormDynamicInitialTab? teacherDormDynamicInitialTab,
     bool clearTeacherDormDynamicInitialTab = false,
     List<SmartCampusRole>? availableRoles,
+    int? dashboardRefreshEpoch,
   }) {
     return SmartCampusState(
       selectedRole: selectedRole ?? this.selectedRole,
@@ -270,6 +276,7 @@ class SmartCampusState {
           ? null
           : (teacherDormDynamicInitialTab ?? this.teacherDormDynamicInitialTab),
       availableRoles: availableRoles ?? this.availableRoles,
+      dashboardRefreshEpoch: dashboardRefreshEpoch ?? this.dashboardRefreshEpoch,
     );
   }
 }

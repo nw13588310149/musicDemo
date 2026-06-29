@@ -19,7 +19,6 @@ import '../../features/consultation/ui/consultation_page.dart';
 import '../../features/personal_center/ui/info_page.dart';
 import '../../features/personal_center/ui/personal_center_page.dart';
 import '../../features/primary/ui/primary_pages.dart' as primary_pages;
-import '../../features/circle/ui/circle_page.dart';
 import '../../features/quiz_practice/ui/quiz_practice_page.dart';
 import '../../features/quiz_practice/ui/quiz_session_page.dart';
 import '../../features/recording_system/ui/recording_system_page.dart'
@@ -111,7 +110,7 @@ class AppRouter {
       case RoutePaths.school:
         return const SchoolCoursewareV2Page();
       case RoutePaths.circle:
-        return const CirclePage();
+        return const SmartCampusCircleEntry();
       case RoutePaths.courseware:
         return const MyCloudDrivePage();
       case RoutePaths.videoTutorial:

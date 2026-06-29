@@ -201,7 +201,13 @@ class ShellController extends StateNotifier<ShellState> {
       // v2 接口返回的是学校列表，旧版接口返回单 Map；两种结构都兜住，
       // 取首项作为「当前学校」用于顶部 logo 与导航开关判定。
       final data = _firstSchool(schoolResponse.data);
-      await _storage.saveSchoolId(readSnowflakeId(data['id']) ?? data['id']);
+      final rawId = data['id'];
+      final schoolId = rawId is String
+          ? rawId.trim()
+          : (readSnowflakeId(rawId) ?? rawId?.toString() ?? '');
+      if (schoolId.isNotEmpty && schoolId != '0') {
+        await _storage.saveSchoolId(schoolId);
+      }
       if (data.isNotEmpty) {
         final logo = _readSchoolLogo(data);
         final schoolName = data['name']?.toString().trim() ?? '';

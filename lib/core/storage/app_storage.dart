@@ -38,6 +38,9 @@ class AppStorage {
 
   String get schoolId => _prefs.getString(_schoolIdKey) ?? '0';
 
+  /// 与 [schoolId] 相同；Web 端对应 localStorage 键 `flutter.schoolId`。
+  String get cachedSchoolId => schoolId;
+
   String get mobile => _prefs.getString(_mobileKey) ?? '';
 
   String get avatarUrl => _prefs.getString(_avatarUrlKey) ?? '';

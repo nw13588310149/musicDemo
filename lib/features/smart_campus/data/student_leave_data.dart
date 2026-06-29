@@ -286,3 +286,15 @@ String _formatDateTime(dynamic raw) {
   return '${local.year}-${two(local.month)}-${two(local.day)} '
       '${two(local.hour)}:${two(local.minute)}:${two(local.second)}';
 }
+
+/// 学生端「我的请假」审批中数量（待家长 / 待班主任审批）。
+int parseStudentLeavePendingCount(dynamic raw) {
+  final rows = parseStudentLeaveList(raw);
+  return rows
+      .where(
+        (r) =>
+            r.status == StudentLeaveStatus.waitingParent ||
+            r.status == StudentLeaveStatus.waitingTeacher,
+      )
+      .length;
+}

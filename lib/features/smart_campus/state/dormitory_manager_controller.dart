@@ -6,25 +6,31 @@ import '../../../core/network/api_response.dart';
 import '../data/dormitory_check_data.dart';
 import '../data/dormitory_repository.dart';
 import '../data/student_dormitory_data.dart' show DormitoryDetailField;
+import '../data/teacher_leave_data.dart';
 import '../data/teacher_notice_data.dart';
+import '../data/teacher_repository.dart';
 import 'dormitory_manager_state.dart';
 
 final dormitoryManagerControllerProvider =
-    StateNotifierProvider.autoDispose<
-      DormitoryManagerController,
-      DormitoryManagerState
-    >((ref) {
-      return DormitoryManagerController(
-        repository: ref.watch(dormitoryRepositoryProvider),
-      );
-    });
+    StateNotifierProvider<DormitoryManagerController, DormitoryManagerState>(
+      (ref) {
+        return DormitoryManagerController(
+          repository: ref.watch(dormitoryRepositoryProvider),
+          teacherRepository: ref.watch(teacherRepositoryProvider),
+        );
+      },
+    );
 
 class DormitoryManagerController extends StateNotifier<DormitoryManagerState> {
-  DormitoryManagerController({required DormitoryRepository repository})
-    : _repository = repository,
-      super(const DormitoryManagerState());
+  DormitoryManagerController({
+    required DormitoryRepository repository,
+    required TeacherRepository teacherRepository,
+  }) : _repository = repository,
+       _teacherRepository = teacherRepository,
+       super(const DormitoryManagerState());
 
   final DormitoryRepository _repository;
+  final TeacherRepository _teacherRepository;
   int _roomLoadSerial = 0;
   int _historyLoadSerial = 0;
 
@@ -192,37 +198,50 @@ class DormitoryManagerController extends StateNotifier<DormitoryManagerState> {
     return parseTeacherNoticeDetail(response.data);
   }
 
-  Future<void> loadHome() async {
-    state = state.copyWith(loadingHome: true, error: '');
-    final responses = await Future.wait([
-      _repository.index(),
-      _repository.dormitoryManagedBuildingList(),
-    ]);
-    final indexResponse = responses[0];
-    final buildingResponse = responses[1];
-    final buildings = buildingResponse.isSuccess
-        ? parseDormitoryManagedBuildingList(buildingResponse.data)
-        : state.managedBuildings;
-    final areas = buildings
-        .where((building) => building.id.isNotEmpty)
-        .map((building) => building.label)
-        .toList(growable: false);
-    final errors = responses
-        .where((response) => !response.isSuccess)
-        .map((response) => response.displayMsg)
-        .where((message) => message.isNotEmpty)
-        .toSet()
-        .join('；');
-    state = state.copyWith(
-      loadingHome: false,
-      index: indexResponse.isSuccess
-          ? parseDormitoryIndexOverview(
-              indexResponse.data,
-            ).copyWith(managedAreas: areas)
-          : state.index,
-      managedBuildings: buildings,
-      error: errors,
-    );
+  Future<void> loadHome({bool silent = false}) async {
+    if (!silent) {
+      state = state.copyWith(loadingHome: true, error: '');
+    }
+    try {
+      final responses = await Future.wait([
+        _repository.index(),
+        _repository.dormitoryManagedBuildingList(),
+        _teacherRepository.teacherLeaveList(current: 1, size: 200, status: 0),
+      ]);
+      final indexResponse = responses[0];
+      final buildingResponse = responses[1];
+      final myLeaveResponse = responses[2];
+      final buildings = buildingResponse.isSuccess
+          ? parseDormitoryManagedBuildingList(buildingResponse.data)
+          : state.managedBuildings;
+      final areas = buildings
+          .where((building) => building.id.isNotEmpty)
+          .map((building) => building.label)
+          .toList(growable: false);
+      final errors = responses
+          .where((response) => !response.isSuccess)
+          .map((response) => response.displayMsg)
+          .where((message) => message.isNotEmpty)
+          .toSet()
+          .join('；');
+      final teacherLeavePendingCount = myLeaveResponse.isSuccess
+          ? parseTeacherLeavePendingCount(myLeaveResponse.data)
+          : state.teacherLeavePendingCount;
+
+      state = state.copyWith(
+        loadingHome: false,
+        index: indexResponse.isSuccess
+            ? parseDormitoryIndexOverview(
+                indexResponse.data,
+              ).copyWith(managedAreas: areas)
+            : state.index,
+        managedBuildings: buildings,
+        teacherLeavePendingCount: teacherLeavePendingCount,
+        error: errors,
+      );
+    } catch (_) {
+      state = state.copyWith(loadingHome: false);
+    }
   }
 
   Future<void> loadHistory({

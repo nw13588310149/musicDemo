@@ -39,12 +39,25 @@ class StudentDashboardLayout extends ConsumerStatefulWidget {
 
 class _StudentDashboardLayoutState extends ConsumerState<StudentDashboardLayout> {
   List<SmartCampusStatCardData> _stats = _placeholderStudentStats();
+  List<SmartCampusQuickActionData> _actions =
+      smartCampusDashboardDataForRole(SmartCampusRole.student).actions;
   String? _studentDormBedLabel;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadIndex());
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    assert(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadIndex();
+      });
+      return true;
+    }());
   }
 
   Future<void> _loadIndex() async {
@@ -54,20 +67,41 @@ class _StudentDashboardLayoutState extends ConsumerState<StudentDashboardLayout>
       final responses = await Future.wait([
         repo.index(),
         repo.myDormitoryInfo(),
+        repo.myExamList(tab: 1),
+        repo.studentLeaveList(current: 1, size: 200),
       ]);
       if (!mounted) return;
 
       final indexResp = responses[0];
       final dormResp = responses[1];
+      final examResp = responses[2];
+      final leaveResp = responses[3];
 
       if (!indexResp.isSuccess && indexResp.msg.isNotEmpty) {
         AppToast.show(context, indexResp.msg);
       }
 
+      final indexBadges = indexResp.isSuccess
+          ? parseStudentDashboardBadgesFromIndex(indexResp.data)
+          : const StudentDashboardBadges();
+      final examPending = examResp.isSuccess
+          ? parseStudentExamList(examResp.data).length
+          : indexBadges.examPending;
+      final leavePending = leaveResp.isSuccess
+          ? parseStudentLeavePendingCount(leaveResp.data)
+          : indexBadges.leavePending;
+      final badges = indexBadges.merge(
+        examPending: examPending,
+        leavePending: leavePending,
+      );
+      final baseActions =
+          smartCampusDashboardDataForRole(SmartCampusRole.student).actions;
+
       setState(() {
         if (indexResp.isSuccess) {
           _stats = _parseStudentIndexStats(indexResp.data);
         }
+        _actions = applyStudentActionBadges(baseActions, badges);
         if (dormResp.isSuccess) {
           _studentDormBedLabel =
               StudentDormitoryInfo.fromJson(dormResp.data).displayLabel;
@@ -82,6 +116,16 @@ class _StudentDashboardLayoutState extends ConsumerState<StudentDashboardLayout>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int>(
+      smartCampusControllerProvider.select((s) => s.dashboardRefreshEpoch),
+      (previous, next) {
+        if (previous == null || previous == next) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _loadIndex();
+        });
+      },
+    );
+
     final ui = DashboardScaleScope.of(context).ui;
     final data = smartCampusDashboardDataForRole(SmartCampusRole.student);
     final institutionName = ref.watch(shellControllerProvider).schoolName;
@@ -112,6 +156,7 @@ class _StudentDashboardLayoutState extends ConsumerState<StudentDashboardLayout>
                 _StudentMainColumn(
                   data: data,
                   stats: _stats,
+                  actions: _actions,
                   width: mainWidth,
                   fillRemaining: false,
                   onOpenPrincipalMailbox: widget.onOpenPrincipalMailbox,
@@ -151,6 +196,7 @@ class _StudentDashboardLayoutState extends ConsumerState<StudentDashboardLayout>
               child: _StudentMainColumn(
                 data: data,
                 stats: _stats,
+                actions: _actions,
                 width: mainWidth,
                 fillRemaining: true,
                 onOpenPrincipalMailbox: widget.onOpenPrincipalMailbox,
@@ -192,6 +238,7 @@ class _StudentMainColumn extends StatelessWidget {
   const _StudentMainColumn({
     required this.data,
     required this.stats,
+    required this.actions,
     required this.width,
     required this.fillRemaining,
     required this.onOpenPrincipalMailbox,
@@ -208,6 +255,7 @@ class _StudentMainColumn extends StatelessWidget {
 
   final SmartCampusDashboardData data;
   final List<SmartCampusStatCardData> stats;
+  final List<SmartCampusQuickActionData> actions;
   final double width;
   final bool fillRemaining;
   final VoidCallback onOpenPrincipalMailbox;
@@ -227,7 +275,7 @@ class _StudentMainColumn extends StatelessWidget {
 
     final actionPanel = _TeacherActionPanel(
       data: data,
-      actions: data.actions,
+      actions: actions,
       onOpenPrincipalMailbox: onOpenPrincipalMailbox,
       onOpenMyClass: onOpenMyClass,
       onOpenClassWorkbench: () {},

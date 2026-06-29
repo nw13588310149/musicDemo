@@ -462,6 +462,12 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
     _openWithReturn(SmartCampusMainView.groupChat);
   }
 
+  /// 「校圈」入口（学生 / 教师 / 班主任 / 宿管 / 管理员 共用）：在智慧校园
+  /// 主内容区内打开 [CirclePage]，与群聊等同层子路由，不占全 App  overlay。
+  void openSchoolCircle() {
+    _openWithReturn(SmartCampusMainView.schoolCircle);
+  }
+
   /// 学生端「查寝管理」入口：进入个人查寝/补卡页面。
   ///   - 紫白渐变 header + 仅展示本人「<姓名>」的查寝记录提示
   ///   - 4 张统计卡（宿舍床位 / 正常打卡 / 异常 / 补卡待审）
@@ -528,7 +534,7 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
     state = state.copyWith(mainView: SmartCampusMainView.leaveManagement);
   }
 
-  /// 班主任端「查寝动态」入口：掌握本班住宿生归宿与晨检结果，协同处理
+  /// 宿管端「查寝动态」入口：按班级掌握住宿生归宿与晨检结果，协同处理
   /// 补卡与异常跟进。
   ///   - 顶部紫白渐变 banner + 副标题（现场刷脸由查寝老师/宿管在专用端
   ///     执行，本页不提供打卡入口）
@@ -765,17 +771,28 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
 
   void backToDashboard() {
     final returnTo = state.returnMainView;
+    SmartCampusMainView target;
     if (returnTo != null) {
+      target = returnTo;
       state = state.copyWith(
-        mainView: returnTo,
+        mainView: target,
         clearReturnMainView: true,
       );
+    } else if (state.mainView == SmartCampusMainView.dashboard) {
       return;
+    } else {
+      target = SmartCampusMainView.dashboard;
+      state = state.copyWith(mainView: target);
     }
-    if (state.mainView == SmartCampusMainView.dashboard) {
-      return;
+    if (target == SmartCampusMainView.dashboard) {
+      _bumpDashboardRefresh();
     }
-    state = state.copyWith(mainView: SmartCampusMainView.dashboard);
+  }
+
+  void _bumpDashboardRefresh() {
+    state = state.copyWith(
+      dashboardRefreshEpoch: state.dashboardRefreshEpoch + 1,
+    );
   }
 
   void selectMailboxMessageType(PrincipalMailboxMessageType type) {

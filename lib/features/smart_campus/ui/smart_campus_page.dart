@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
-import '../../../app/router/route_paths.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../circle/ui/circle_page.dart';
 import '../../shell/state/shell_controller.dart';
@@ -88,8 +87,8 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 ///     会话列表 + 右紫色渐变 header + 群公告 + 系统提示 + 文本/图片/
 ///     语音/文件 消息气泡 + 输入栏。消息模型对齐 1.0 chat.vue：
 ///     type 0=系统、1=文本、2=图片、3=富内容(视频/课件/资讯/课程/语音)。）
-///   - 「校圈」label → 直接走 [Navigator.pushNamed] 到 [RoutePaths.circle]，
-///     与首页"校圈"快捷入口共用同一全屏 [CirclePage]。
+///   - `mainView == schoolCircle` → [CirclePage]（校圈列表/沉浸，与首页
+///     侧栏校圈共用同一页面，仅在智慧校园主内容区内展示。）
 ///
 /// - `dormManager` / `admin`（含其他 mainView）：
 ///   仍走 [_SmartCampusPlaceholder] 骨架占位页，待后续按 Figma 重建。
@@ -98,6 +97,34 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 /// 进入「校长信箱 / 我的班级 / 我的课表 / 班级工作台」全部走
 /// [SmartCampusController] 的 open* 方法，从 dashboard 返回时调
 /// `controller.backToDashboard()`。
+///
+/// Shell 路由 `/circle` 请使用 [SmartCampusCircleEntry]：校圈只在智慧校园
+/// 主内容区内展示，与群聊同级子路由，不占独立全屏页。
+class SmartCampusCircleEntry extends ConsumerStatefulWidget {
+  const SmartCampusCircleEntry({super.key});
+
+  @override
+  ConsumerState<SmartCampusCircleEntry> createState() =>
+      _SmartCampusCircleEntryState();
+}
+
+class _SmartCampusCircleEntryState extends ConsumerState<SmartCampusCircleEntry> {
+  bool _didOpen = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_didOpen) return;
+    _didOpen = true;
+    ref.read(smartCampusControllerProvider.notifier).openSchoolCircle();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const SmartCampusPage();
+  }
+}
+
 class SmartCampusPage extends ConsumerStatefulWidget {
   const SmartCampusPage({super.key});
 
@@ -172,32 +199,8 @@ class _SmartCampusPageBody extends ConsumerWidget {
         state.selectedRole == SmartCampusRole.teacher ||
         state.selectedRole == SmartCampusRole.headTeacher;
 
-    // 校圈全屏 overlay：不再 pushNamed 套一层 ShellScaffold，避免移动端
-    // 重复侧栏占位导致内容区只有左侧 inset、右侧贴边。
-    void openSchoolCircle() {
-      final scale = DashboardScaleScope.of(context);
-      final inset = scale.ui(ShellLayoutSpec.pageGap);
-      Navigator.of(context).push(
-        PageRouteBuilder<void>(
-          opaque: true,
-          transitionDuration: Duration.zero,
-          reverseTransitionDuration: Duration.zero,
-          pageBuilder: (context, animation, secondaryAnimation) {
-            return ColoredBox(
-              color: const Color(0xFFEFF3FC),
-              child: SafeArea(
-                child: Padding(
-                  padding: EdgeInsets.all(inset),
-                  child: DashboardScaleScope(
-                    data: scale,
-                    child: const CirclePage(),
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-      );
+    Widget buildSchoolCircleRoute() {
+      return CirclePage(onBack: controller.backToDashboard);
     }
 
     Widget buildPrincipalMailboxRoute() {
@@ -219,6 +222,9 @@ class _SmartCampusPageBody extends ConsumerWidget {
           currentUserName: shellState.user.displayName,
           currentUserAvatarUrl: shellState.user.avatarUrl,
         );
+      }
+      if (state.mainView == SmartCampusMainView.schoolCircle) {
+        return buildSchoolCircleRoute();
       }
       // 管理员端「学生管理」独立视图：banner + 4 张渐变统计卡 + 5 状态 tabs +
       // 班级 dropdown + 搜索 + 当前结果 + 学生卡 3 列网格；点击卡片打开
@@ -292,7 +298,7 @@ class _SmartCampusPageBody extends ConsumerWidget {
           onSelectRole: controller.selectRole,
           onOpenGroupChat: controller.openGroupChat,
           onOpenPrincipalMailbox: controller.openPrincipalMailbox,
-          onOpenSchoolCircle: openSchoolCircle,
+          onOpenSchoolCircle: controller.openSchoolCircle,
           onOpenStudentManagement: controller.openStudentManagement,
           onOpenTeacherManagement: controller.openTeacherManagement,
           onOpenClassManagement: controller.openClassManagement,
@@ -310,7 +316,6 @@ class _SmartCampusPageBody extends ConsumerWidget {
         return TeacherClassWorkbenchView(
           onBack: controller.backToDashboard,
           onOpenLeaveApproval: controller.openLeaveApproval,
-          onOpenDormDynamic: controller.openDormDynamic,
           onOpenHomeSchool: controller.openHomeSchoolCommunication,
           onOpenGroupChat: controller.openGroupChat,
           onOpenDormHistory: controller.openDormHistory,
@@ -362,14 +367,6 @@ class _SmartCampusPageBody extends ConsumerWidget {
       if (state.mainView == SmartCampusMainView.leaveApproval) {
         return TeacherLeaveApprovalView(onBack: controller.backToDashboard);
       }
-      // 班主任端"查寝动态"独立视图：banner + 4 张统计卡(住宿生 / 今晚已归寝
-      // 口径 / 异常 / 补卡待审) + 提示文案 + 「本班查纪 / 补卡审核」tabs +
-      // 搜索框 + 「全部异常记录 N 条」+ 全部 / 异常 toggle + 学生口径卡片
-      // (头像/学号/状态徽章/宿舍/规定打卡时间双列/备注) 与宿舍口径卡片
-      // (晨查寝/晚查寝 18 Barlow 标题 + 大色块状态徽章) 网格。
-      if (state.mainView == SmartCampusMainView.dormDynamic) {
-        return TeacherDormDynamicView(onBack: controller.backToDashboard);
-      }
       // 班主任端"查寝历史"独立视图：banner + 14 天日期条 + 4 张统计卡 +
       // 晚查寝 / 晨查寝 tabs + 宿舍口径 (晨/晚查寝大标题) 与学生口径
       // (头像/学号/状态徽章) 卡片混合 3 列网格；从 dashboard 进入后切走，
@@ -395,6 +392,9 @@ class _SmartCampusPageBody extends ConsumerWidget {
           currentUserAvatarUrl: shellState.user.avatarUrl,
         );
       }
+      if (state.mainView == SmartCampusMainView.schoolCircle) {
+        return buildSchoolCircleRoute();
+      }
       return TeacherDashboardLayout(
         selectedRole: state.selectedRole,
         // 跨端老师（teacherRole 返回多个角色）/ admin 切到任课/班主任视图
@@ -408,14 +408,13 @@ class _SmartCampusPageBody extends ConsumerWidget {
         onOpenClassWorkbench: controller.openClassWorkbench,
         onOpenMySchedule: controller.openMySchedule,
         onOpenGroupChat: controller.openGroupChat,
-        onOpenSchoolCircle: openSchoolCircle,
+        onOpenSchoolCircle: controller.openSchoolCircle,
         onOpenClassAttendance: controller.openClassAttendance,
         onOpenStudentRoster: controller.openStudentRoster,
         onOpenHomeworkReview: controller.openHomeworkReview,
         onOpenExamReview: controller.openExamReview,
         onOpenMyTeacherLeave: controller.openMyTeacherLeave,
         onOpenLeaveApproval: controller.openLeaveApproval,
-        onOpenDormDynamic: controller.openDormDynamic,
         onOpenDormHistory: controller.openDormHistory,
         onOpenHomeSchool: controller.openHomeSchoolCommunication,
         // 把任课老师 / 班主任 tab 切换持久化到 controller，并在进入子页前
@@ -458,6 +457,9 @@ class _SmartCampusPageBody extends ConsumerWidget {
           currentUserAvatarUrl: shellState.user.avatarUrl,
         );
       }
+      if (state.mainView == SmartCampusMainView.schoolCircle) {
+        return buildSchoolCircleRoute();
+      }
       // 学生端"请假管理"独立视图：banner 返回 → controller.backToDashboard。
       if (state.mainView == SmartCampusMainView.leaveManagement) {
         return StudentLeaveManagementView(onBack: controller.backToDashboard);
@@ -478,7 +480,7 @@ class _SmartCampusPageBody extends ConsumerWidget {
         onOpenMyHomework: controller.openMyHomework,
         onOpenMyGrades: controller.openMyGrades,
         onOpenGroupChat: controller.openGroupChat,
-        onOpenSchoolCircle: openSchoolCircle,
+        onOpenSchoolCircle: controller.openSchoolCircle,
         onOpenLeaveManagement: controller.openLeaveManagement,
         onOpenDormCheck: controller.openDormCheck,
       );
@@ -497,6 +499,9 @@ class _SmartCampusPageBody extends ConsumerWidget {
           currentUserName: shellState.user.displayName,
           currentUserAvatarUrl: shellState.user.avatarUrl,
         );
+      }
+      if (state.mainView == SmartCampusMainView.schoolCircle) {
+        return buildSchoolCircleRoute();
       }
       if (state.mainView == SmartCampusMainView.dormCheckByRoom) {
         return DormManagerCheckByRoomView(
@@ -518,6 +523,10 @@ class _SmartCampusPageBody extends ConsumerWidget {
           onBack: controller.backToDashboard,
         );
       }
+      // 宿管端「查寝动态」：按班级查看住宿生查寝状态与补卡审核。
+      if (state.mainView == SmartCampusMainView.dormDynamic) {
+        return TeacherDormDynamicView(onBack: controller.backToDashboard);
+      }
       if (state.mainView == SmartCampusMainView.myTeacherLeave) {
         return TeacherMyLeaveView(
           onBack: controller.backToDashboard,
@@ -533,12 +542,12 @@ class _SmartCampusPageBody extends ConsumerWidget {
           onSelectRole: controller.selectRole,
           onOpenGroupChat: controller.openGroupChat,
           onOpenPrincipalMailbox: controller.openPrincipalMailbox,
-          onOpenSchoolCircle: openSchoolCircle,
+          onOpenSchoolCircle: controller.openSchoolCircle,
           onOpenDormCheckByRoom: controller.openDormCheckByRoom,
           onOpenDormCheckHistory: controller.openDormHistory,
           onOpenCheckInManagement: controller.openDormCheckInManagement,
           onOpenDormManagerLeave: controller.openMyTeacherLeave,
-          onOpenDormMakeupAudit: controller.openDormMakeupAudit,
+          onOpenDormDynamic: controller.openDormDynamic,
         );
       }
     }
@@ -679,6 +688,8 @@ class _SmartCampusPlaceholder extends StatelessWidget {
         return '我的考试';
       case SmartCampusMainView.groupChat:
         return '群聊';
+      case SmartCampusMainView.schoolCircle:
+        return '校圈';
       case SmartCampusMainView.leaveManagement:
         return '请假管理';
       case SmartCampusMainView.leaveApproval:

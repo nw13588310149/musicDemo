@@ -160,6 +160,12 @@ int? parseTeacherLeaveTotal(dynamic raw) {
   return null;
 }
 
+/// 待审批本人请假条数（`status: 0` 列表的 `total` 或 `records` 长度）。
+int parseTeacherLeavePendingCount(dynamic raw) {
+  return parseTeacherLeaveTotal(raw) ??
+      parseTeacherLeaveList(raw).length;
+}
+
 List<Map<String, dynamic>> _extractRecordMaps(dynamic raw) {
   if (raw is List) {
     return [

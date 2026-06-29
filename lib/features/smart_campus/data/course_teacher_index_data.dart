@@ -23,6 +23,9 @@ class CourseTeacherIndexRes {
     pendingHomeworkCount: 0,
     todayCourseList: [],
   );
+
+  /// 顶部统计「待签课」：`todayCourseList` 中 `signStatus` 未签（0 / 空）的数量。
+  int get pendingSignCount => countUnsignedTeacherCourses(todayCourseList);
 }
 
 CourseTeacherIndexRes parseCourseTeacherIndexRes(dynamic raw) {
@@ -91,7 +94,7 @@ List<SmartCampusStatCardData> buildCourseTeacherStats({
   required CourseTeacherIndexRes index,
   int? weekCourseCount,
 }) {
-  final unsigned = countUnsignedTeacherCourses(index.todayCourseList);
+  final unsigned = index.pendingSignCount;
   final pendingTodo = index.pendingHomeworkCount + unsigned;
 
   return [
@@ -123,10 +126,14 @@ List<SmartCampusStatCardData> buildCourseTeacherStats({
   ];
 }
 
-Map<String, int> buildCourseTeacherActionBadges(CourseTeacherIndexRes index) {
+Map<String, int> buildCourseTeacherActionBadges(
+  CourseTeacherIndexRes index, {
+  int myLeavePendingCount = 0,
+}) {
   return <String, int>{
     '作业批改': index.pendingHomeworkCount,
-    '签课管理': countUnsignedTeacherCourses(index.todayCourseList),
+    '签课管理': index.pendingSignCount,
+    '我的请假': myLeavePendingCount,
   };
 }
 

@@ -215,7 +215,6 @@ class TeacherClassWorkbenchView extends ConsumerStatefulWidget {
     super.key,
     required this.onBack,
     this.onOpenLeaveApproval,
-    this.onOpenDormDynamic,
     this.onOpenHomeSchool,
     this.onOpenGroupChat,
     this.onOpenDormHistory,
@@ -224,7 +223,6 @@ class TeacherClassWorkbenchView extends ConsumerStatefulWidget {
 
   final VoidCallback onBack;
   final VoidCallback? onOpenLeaveApproval;
-  final VoidCallback? onOpenDormDynamic;
   final VoidCallback? onOpenHomeSchool;
   final VoidCallback? onOpenGroupChat;
   final VoidCallback? onOpenDormHistory;
@@ -336,7 +334,6 @@ class _TeacherClassWorkbenchViewState
                   selectedClassIndex: _selectedClassIndex,
                   onClassChanged: _selectClass,
                   onOpenLeaveApproval: widget.onOpenLeaveApproval,
-                  onOpenDormDynamic: widget.onOpenDormDynamic,
                   onOpenHomeSchool: widget.onOpenHomeSchool,
                     onOpenGroupChat: widget.onOpenGroupChat,
                     onOpenDormHistory: widget.onOpenDormHistory,
@@ -504,7 +501,6 @@ class _OverviewTab extends StatelessWidget {
     required this.selectedClassIndex,
     required this.onClassChanged,
     this.onOpenLeaveApproval,
-    this.onOpenDormDynamic,
     this.onOpenHomeSchool,
     this.onOpenGroupChat,
     this.onOpenDormHistory,
@@ -516,7 +512,6 @@ class _OverviewTab extends StatelessWidget {
   final int selectedClassIndex;
   final ValueChanged<int> onClassChanged;
   final VoidCallback? onOpenLeaveApproval;
-  final VoidCallback? onOpenDormDynamic;
   final VoidCallback? onOpenHomeSchool;
   final VoidCallback? onOpenGroupChat;
   final VoidCallback? onOpenDormHistory;
@@ -615,13 +610,12 @@ class _OverviewTab extends StatelessWidget {
           index: index,
           fillHeight: true,
           onOpenLeaveApproval: onOpenLeaveApproval,
-          onOpenDormDynamic: onOpenDormDynamic,
+          onOpenDormHistory: onOpenDormHistory,
           onOpenHomeSchool: onOpenHomeSchool,
         ),
         rightBody: _QuickActionGrid(
           fillHeight: true,
           onOpenLeaveApproval: onOpenLeaveApproval,
-          onOpenDormDynamic: onOpenDormDynamic,
           onOpenHomeSchool: onOpenHomeSchool,
           onOpenGroupChat: onOpenGroupChat,
           onOpenDormHistory: onOpenDormHistory,
@@ -658,7 +652,7 @@ class _OverviewTab extends StatelessWidget {
       _ShortcutStatGrid(
         index: index,
         onOpenLeaveApproval: onOpenLeaveApproval,
-        onOpenDormDynamic: onOpenDormDynamic,
+        onOpenDormHistory: onOpenDormHistory,
         onOpenHomeSchool: onOpenHomeSchool,
       ),
       SizedBox(height: ui(20)),
@@ -682,7 +676,6 @@ class _OverviewTab extends StatelessWidget {
       SizedBox(height: ui(12)),
       _QuickActionGrid(
         onOpenLeaveApproval: onOpenLeaveApproval,
-        onOpenDormDynamic: onOpenDormDynamic,
         onOpenHomeSchool: onOpenHomeSchool,
         onOpenGroupChat: onOpenGroupChat,
         onOpenDormHistory: onOpenDormHistory,
@@ -2060,14 +2053,14 @@ class _ShortcutStatGrid extends StatelessWidget {
     required this.index,
     this.fillHeight = false,
     this.onOpenLeaveApproval,
-    this.onOpenDormDynamic,
+    this.onOpenDormHistory,
     this.onOpenHomeSchool,
   });
 
   final HeadTeacherIndexRes index;
   final bool fillHeight;
   final VoidCallback? onOpenLeaveApproval;
-  final VoidCallback? onOpenDormDynamic;
+  final VoidCallback? onOpenDormHistory;
   final VoidCallback? onOpenHomeSchool;
 
   @override
@@ -2182,7 +2175,7 @@ class _ShortcutStatGrid extends StatelessWidget {
               value: index.todayAbnormalDormCount.toString(),
               label: '查寝异常',
               actionLabel: index.todayAbnormalDormCount > 0 ? '查看' : null,
-              onActionTap: onOpenDormDynamic,
+              onActionTap: onOpenDormHistory,
             ),
             SizedBox(width: ui(12)),
             cell(
@@ -2206,7 +2199,6 @@ class _QuickActionGrid extends StatelessWidget {
   const _QuickActionGrid({
     this.fillHeight = false,
     this.onOpenLeaveApproval,
-    this.onOpenDormDynamic,
     this.onOpenHomeSchool,
     this.onOpenGroupChat,
     this.onOpenDormHistory,
@@ -2215,7 +2207,6 @@ class _QuickActionGrid extends StatelessWidget {
 
   final bool fillHeight;
   final VoidCallback? onOpenLeaveApproval;
-  final VoidCallback? onOpenDormDynamic;
   final VoidCallback? onOpenHomeSchool;
   final VoidCallback? onOpenGroupChat;
   final VoidCallback? onOpenDormHistory;
@@ -2231,11 +2222,6 @@ class _QuickActionGrid extends StatelessWidget {
       label: '请假审批',
       imagePath:
           'assets/images/smartCampus/home_actions/head_teacher/leave_approval.png',
-    ),
-    _QuickActionData(
-      label: '查寝动态',
-      imagePath:
-          'assets/images/smartCampus/home_actions/head_teacher/dorm_dynamic.png',
     ),
     _QuickActionData(
       label: '家校沟通',
@@ -2258,7 +2244,6 @@ class _QuickActionGrid extends StatelessWidget {
     return switch (label) {
       '校长信箱' => onOpenPrincipalMailbox,
       '请假审批' => onOpenLeaveApproval,
-      '查寝动态' => onOpenDormDynamic,
       '家校沟通' => onOpenHomeSchool,
       '班级群聊' => onOpenGroupChat,
       '查寝历史' => onOpenDormHistory,
