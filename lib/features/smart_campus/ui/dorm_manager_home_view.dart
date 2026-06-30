@@ -277,6 +277,7 @@ class _DormMainColumn extends StatelessWidget {
           _DormStatsRow(index: index),
           SizedBox(height: ui(16)),
           _DormQuickActionsCard(
+            pendingMakeupCount: index.pendingMakeupCount,
             teacherLeavePendingCount: teacherLeavePendingCount,
             onOpenGroupChat: onOpenGroupChat,
             onOpenPrincipalMailbox: onOpenPrincipalMailbox,
@@ -300,6 +301,7 @@ class _DormMainColumn extends StatelessWidget {
         _DormStatsRow(index: index),
         SizedBox(height: ui(16)),
         _DormQuickActionsCard(
+          pendingMakeupCount: index.pendingMakeupCount,
           teacherLeavePendingCount: teacherLeavePendingCount,
           onOpenGroupChat: onOpenGroupChat,
           onOpenPrincipalMailbox: onOpenPrincipalMailbox,
@@ -308,6 +310,7 @@ class _DormMainColumn extends StatelessWidget {
           onOpenDormCheckHistory: onOpenDormCheckHistory,
           onOpenCheckInManagement: onOpenCheckInManagement,
           onOpenDormManagerLeave: onOpenDormManagerLeave,
+          onOpenDormDynamic: onOpenDormDynamic,
         ),
         SizedBox(height: ui(16)),
         dutySection,
@@ -641,6 +644,7 @@ class _PendingCard extends StatelessWidget {
 
 class _DormQuickActionsCard extends StatelessWidget {
   const _DormQuickActionsCard({
+    this.pendingMakeupCount = 0,
     this.teacherLeavePendingCount = 0,
     this.onOpenGroupChat,
     this.onOpenPrincipalMailbox,
@@ -660,7 +664,19 @@ class _DormQuickActionsCard extends StatelessWidget {
   final VoidCallback? onOpenCheckInManagement;
   final VoidCallback? onOpenDormManagerLeave;
   final VoidCallback? onOpenDormDynamic;
+  final int pendingMakeupCount;
   final int teacherLeavePendingCount;
+
+  String? _badgeLabelFor(String label) {
+    switch (label) {
+      case '查寝动态':
+        return smartCampusCountBadgeLabel(pendingMakeupCount);
+      case '宿管请假':
+        return smartCampusCountBadgeLabel(teacherLeavePendingCount);
+      default:
+        return null;
+    }
+  }
 
   VoidCallback? _resolveTap(String label) {
     switch (label) {
@@ -692,9 +708,7 @@ class _DormQuickActionsCard extends StatelessWidget {
           SmartCampusQuickActionItem(
             label: action.label,
             assetPath: action.iconAsset,
-            badgeLabel: action.label == '宿管请假'
-                ? smartCampusCountBadgeLabel(teacherLeavePendingCount)
-                : null,
+            badgeLabel: _badgeLabelFor(action.label),
             onTap: _resolveTap(action.label),
           ),
       ],
