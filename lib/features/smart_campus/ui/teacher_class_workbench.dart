@@ -2509,6 +2509,7 @@ class _LeaveListCardState extends ConsumerState<_LeaveListCard> {
     };
     return _LeaveItem(
       name: record.studentName,
+      headUrl: record.headUrl,
       timeRange: _formatLeaveTimeRange(record.timeRange),
       submitted: record.appliedAt.isNotEmpty
           ? '提交于${_formatLeaveSubmitted(record.appliedAt)}'
@@ -2570,6 +2571,7 @@ class _LeaveListCardState extends ConsumerState<_LeaveListCard> {
                       if (i > 0) SizedBox(height: ui(12)),
                       _PersonRowCard(
                         avatarSeed: _items[i].name.characters.first,
+                        headUrl: _items[i].headUrl,
                         name: _items[i].name,
                         line2: _items[i].timeRange,
                         line3: _items[i].submitted,
@@ -2588,6 +2590,7 @@ class _LeaveListCardState extends ConsumerState<_LeaveListCard> {
 class _LeaveItem {
   const _LeaveItem({
     required this.name,
+    this.headUrl,
     required this.timeRange,
     required this.submitted,
     required this.tag,
@@ -2595,6 +2598,7 @@ class _LeaveItem {
     required this.tagTextColor,
   });
   final String name;
+  final String? headUrl;
   final String timeRange;
   final String submitted;
   final String tag;
@@ -2748,6 +2752,7 @@ class _AttentionListCardState extends ConsumerState<_AttentionListCard> {
 class _PersonRowCard extends StatelessWidget {
   const _PersonRowCard({
     required this.avatarSeed,
+    this.headUrl,
     required this.name,
     required this.line2,
     required this.line3,
@@ -2758,6 +2763,7 @@ class _PersonRowCard extends StatelessWidget {
   });
 
   final String avatarSeed;
+  final String? headUrl;
   final String name;
   final String line2;
   final String line3;
@@ -2784,25 +2790,7 @@ class _PersonRowCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 头像
-                Container(
-                  width: ui(40),
-                  height: ui(40),
-                  decoration: BoxDecoration(
-                    color: _kPurpleSoft,
-                    borderRadius: BorderRadius.circular(ui(20)),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    avatarSeed,
-                    style: TextStyle(
-                      fontSize: ui(15),
-                      color: Colors.white,
-                      fontWeight: FontWeight.w500,
-                      height: 1,
-                    ),
-                  ),
-                ),
+                _buildPersonAvatar(ui),
                 SizedBox(width: ui(10)),
                 Expanded(
                   child: Column(
@@ -2887,6 +2875,41 @@ class _PersonRowCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(ui(12)),
         child: card,
+      ),
+    );
+  }
+
+  Widget _buildPersonAvatar(double Function(double) ui) {
+    final size = ui(40);
+    final radius = ui(20);
+    final fallback = Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: _kPurpleSoft,
+        borderRadius: BorderRadius.circular(radius),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        avatarSeed,
+        style: TextStyle(
+          fontSize: ui(15),
+          color: Colors.white,
+          fontWeight: FontWeight.w500,
+          height: 1,
+        ),
+      ),
+    );
+    final url = headUrl?.trim() ?? '';
+    if (url.isEmpty) return fallback;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: Image.network(
+        url,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => fallback,
       ),
     );
   }

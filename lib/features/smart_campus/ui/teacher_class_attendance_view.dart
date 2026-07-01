@@ -81,7 +81,6 @@ const Color _kBigClassDot = Color(0xFFA773FF); // 大课 tag dot
 
 // 各区块最低高度（Figma 设计值），避免数据加载前后页面高度跳动。
 const double _kRecentRecordSectionMinHeight = 178;
-const double _kTodayClassesPanelMinHeight = 274;
 const double _kSignActionPanelMinHeight = 465;
 const double _kHistoryListMinHeight = 320;
 
@@ -1448,11 +1447,12 @@ class _TodayClassesPanel extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     final isEmpty = classes.isEmpty;
     return Container(
+      // 空态固定高度；有课时最低高度与右侧「签到操作」面板保持一致。
       width: double.infinity,
-      height: isEmpty ? ui(_kTodayClassesPanelMinHeight) : null,
+      height: isEmpty ? ui(_kSignActionPanelMinHeight) : null,
       constraints: isEmpty
           ? null
-          : BoxConstraints(minHeight: ui(_kTodayClassesPanelMinHeight)),
+          : BoxConstraints(minHeight: ui(_kSignActionPanelMinHeight)),
       padding: EdgeInsets.all(ui(12)),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(

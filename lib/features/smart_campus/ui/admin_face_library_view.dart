@@ -62,6 +62,7 @@ import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/image_gallery_viewer.dart';
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../../core/widgets/scaled_dialog.dart';
+import '../../../core/widgets/segment_toggle.dart';
 import '../../courseware/state/cloud_drive_controller.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_home_data.dart';
@@ -1296,64 +1297,17 @@ class _BannerSegment extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(32),
-      padding: EdgeInsets.all(ui(2)),
-      decoration: BoxDecoration(
-        color: _kPanelBg,
-        borderRadius: BorderRadius.circular(ui(8)),
-        border: Border.all(color: _kBorderSoft),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final t in _FaceTab.values)
-            _FaceTabSegmentItem(
-              label: t.label,
-              selected: t == currentTab,
-              onTap: () => onSelectTab(t),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FaceTabSegmentItem extends StatelessWidget {
-  const _FaceTabSegmentItem({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(6)),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(5)),
-        decoration: BoxDecoration(
-          color: selected ? _kTextDark : Colors.transparent,
-          borderRadius: BorderRadius.circular(ui(6)),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: ui(12),
-            color: selected ? Colors.white : _kTextHint,
-            fontFamily: 'PingFang SC',
-            fontWeight: selected ? AppFont.w500 : AppFont.w400,
-            height: 1.2,
-          ),
-        ),
-      ),
+    return SegmentToggle(
+      selectedIndex: currentTab == _FaceTab.enroll ? 0 : 1,
+      fontSize: 12,
+      trackColor: _kPanelBg,
+      thumbColor: _kTextDark,
+      options: [
+        SegmentToggleOption(label: _FaceTab.enroll.label),
+        SegmentToggleOption(label: _FaceTab.library.label),
+      ],
+      onChanged: (i) =>
+          onSelectTab(i == 0 ? _FaceTab.enroll : _FaceTab.library),
     );
   }
 }

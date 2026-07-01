@@ -105,30 +105,38 @@ class _AdminSignManagementViewState extends State<AdminSignManagementView> {
       header: _SignBanner(
         onBack: widget.onBack,
         selectedTab: _tab,
-        onSelectTab: (t) => setState(() => _tab = t),
+        onSelectTab: (t) {
+          if (_tab == t) return;
+          setState(() => _tab = t);
+        },
         pendingMakeupCount: _pendingMakeupCount,
         onOpenMakeupAudit: _openMakeupAuditDrawer,
       ),
       bodyScrollable: false,
-      body: _tab == _SignTab.large
-          ? _LargeClassTab(
-              pendingMakeupCount: _pendingMakeupCount,
-              onOpenMakeupAudit: _openMakeupAuditDrawer,
-              onPendingMakeupChanged: (n) {
-                if (_pendingMakeupCount != n) {
-                  setState(() => _pendingMakeupCount = n);
-                }
-              },
-            )
-          : _SmallClassTab(
-              pendingMakeupCount: _pendingMakeupCount,
-              onOpenMakeupAudit: _openMakeupAuditDrawer,
-              onPendingMakeupChanged: (n) {
-                if (_pendingMakeupCount != n) {
-                  setState(() => _pendingMakeupCount = n);
-                }
-              },
-            ),
+      body: IndexedStack(
+        index: _tab == _SignTab.large ? 0 : 1,
+        sizing: StackFit.expand,
+        children: [
+          _LargeClassTab(
+            pendingMakeupCount: _pendingMakeupCount,
+            onOpenMakeupAudit: _openMakeupAuditDrawer,
+            onPendingMakeupChanged: (n) {
+              if (_pendingMakeupCount != n) {
+                setState(() => _pendingMakeupCount = n);
+              }
+            },
+          ),
+          _SmallClassTab(
+            pendingMakeupCount: _pendingMakeupCount,
+            onOpenMakeupAudit: _openMakeupAuditDrawer,
+            onPendingMakeupChanged: (n) {
+              if (_pendingMakeupCount != n) {
+                setState(() => _pendingMakeupCount = n);
+              }
+            },
+          ),
+        ],
+      ),
     );
   }
 

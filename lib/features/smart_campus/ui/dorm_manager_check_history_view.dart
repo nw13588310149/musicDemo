@@ -40,6 +40,7 @@ import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/dormitory_check_data.dart';
+import '../data/student_dormitory_data.dart' show DormitoryDetailStudentProfile;
 import '../services/dormitory_export_saver.dart';
 import '../state/dormitory_manager_controller.dart';
 import 'widgets/dormitory_detail_dialog.dart';
@@ -53,6 +54,7 @@ const Color _kBorderSoft = Color(0xFFF3F2F3);
 const Color _kTextDark = Color(0xFF0B081A);
 const Color _kTextDarker = Color(0xFF1A1A1A);
 const Color _kTextSecondary = Color(0xFF6D6B75);
+const Color _kTextMuted = Color(0xFF71717A);
 const Color _kTextHint = Color(0xFFB6B5BB);
 const Color _kCalendarHint = Color(0xFFE6E9F1);
 const Color _kPurple = Color(0xFF8741FF);
@@ -205,10 +207,13 @@ class _DormManagerCheckHistoryViewState
 
   Future<void> _showCheckDetail(DormitoryCheckHistoryItem item) async {
     if (item.id.isEmpty) return;
-    final fields = await ref
+    final apiFields = await ref
         .read(dormitoryManagerControllerProvider.notifier)
         .loadCheckDetail(item.id);
     if (!mounted) return;
+    final fields = apiFields.isEmpty
+        ? buildDormitoryCheckDetailFieldsFromHistoryItem(item)
+        : mergeDormitoryCheckDetailFields(fields: apiFields, item: item);
     if (fields.isEmpty) {
       AppToast.show(context, '未获取到查寝详情');
       return;
@@ -217,6 +222,11 @@ class _DormManagerCheckHistoryViewState
       context,
       title: '${item.studentName} · 查寝详情',
       fields: fields,
+      studentProfile: DormitoryDetailStudentProfile(
+        name: item.studentName,
+        avatarUrl: item.avatarUrl,
+        subtitle: item.studentSubtitle,
+      ),
     );
   }
 
@@ -282,6 +292,7 @@ class _DormManagerCheckHistoryViewState
             MainContentLoadingShell(
               loading: loading && historyItems.isEmpty,
               preserveChrome: true,
+              scrimColor: Colors.transparent,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -961,7 +972,13 @@ class _HistoryTableRow extends StatelessWidget {
                 flex: 16,
                 child: Text(
                   item.checkDate.isEmpty ? '—' : item.checkDate,
-                  style: TextStyle(fontSize: ui(12), color: _kTextSecondary),
+                  style: TextStyle(
+                    fontSize: ui(12),
+                    color: _kTextDark,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w400,
+                    height: 1,
+                  ),
                 ),
               ),
               Expanded(
@@ -970,8 +987,9 @@ class _HistoryTableRow extends StatelessWidget {
                   item.checkTime.isEmpty ? '—' : item.checkTime,
                   style: TextStyle(
                     fontSize: ui(12),
-                    fontFamily: 'Barlow',
-                    fontWeight: FontWeight.w500,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w400,
+                    height: 1,
                     color: item.status == DormitoryStudentCheckStatus.lateReturn
                         ? _kRed
                         : _kTextDark,
@@ -1012,11 +1030,11 @@ class _TwoLineCell extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            fontSize: ui(13),
+            fontSize: ui(12),
             color: _kTextDark,
             fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w500,
-            height: 1.3,
+            fontWeight: AppFont.w400,
+            height: 1,
           ),
         ),
         if (secondary != null && secondary!.isNotEmpty) ...[
@@ -1026,10 +1044,11 @@ class _TwoLineCell extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: ui(11),
-              color: _kTextHint,
+              fontSize: ui(12),
+              color: _kTextSecondary,
               fontFamily: 'PingFang SC',
-              height: 1.2,
+              fontWeight: AppFont.w400,
+              height: 1,
             ),
           ),
         ],
@@ -1063,11 +1082,11 @@ class _StudentAvatar extends StatelessWidget {
         child: Text(
           initial,
           style: TextStyle(
-            fontSize: ui(14),
+            fontSize: ui(12),
             color: _kPurple,
             fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w500,
-            height: 1.0,
+            fontWeight: AppFont.w400,
+            height: 1,
           ),
         ),
       );
@@ -1098,7 +1117,7 @@ class _StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(8), vertical: ui(3)),
+      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(2)),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(ui(4)),
@@ -1106,11 +1125,11 @@ class _StatusBadge extends StatelessWidget {
       child: Text(
         text,
         style: TextStyle(
-          fontSize: ui(11),
+          fontSize: ui(12),
           color: Colors.white,
           fontFamily: 'PingFang SC',
-          fontWeight: AppFont.w500,
-          height: 1.2,
+          fontWeight: AppFont.w400,
+          height: 1,
         ),
       ),
     );
@@ -1147,7 +1166,8 @@ class _RowActions extends StatelessWidget {
             fontSize: ui(12),
             color: _kPurple,
             fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w500,
+            fontWeight: AppFont.w400,
+            height: 1,
           ),
         ),
       );
@@ -1155,9 +1175,11 @@ class _RowActions extends StatelessWidget {
       action = Text(
         '已处理',
         style: TextStyle(
-          fontSize: ui(11),
+          fontSize: ui(12),
           color: _kGreen,
           fontFamily: 'PingFang SC',
+          fontWeight: AppFont.w400,
+          height: 1,
         ),
       );
     } else {
@@ -1175,6 +1197,8 @@ class _RowActions extends StatelessWidget {
             fontSize: ui(12),
             color: _kTextSecondary,
             fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w400,
+            height: 1,
           ),
         ),
       );
@@ -1203,10 +1227,10 @@ class _HeaderText extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: ui(12),
-          color: _kTextSecondary,
+          color: _kTextMuted,
           fontFamily: 'PingFang SC',
-          fontWeight: AppFont.w500,
-          height: 1.2,
+          fontWeight: AppFont.w400,
+          height: 1,
         ),
       ),
     );

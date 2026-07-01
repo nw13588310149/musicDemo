@@ -120,6 +120,7 @@ class _DormManagerMakeupAuditViewState
             MainContentLoadingShell(
               loading: state.loadingMakeup && state.makeupItems.isEmpty,
               preserveChrome: true,
+              scrimColor: Colors.transparent,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

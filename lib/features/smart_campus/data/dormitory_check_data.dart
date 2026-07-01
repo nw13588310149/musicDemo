@@ -704,6 +704,84 @@ String _clock(String value) {
   return '${match.group(1)!.padLeft(2, '0')}:${match.group(2)}';
 }
 
+bool _isEmptyDetailValue(String value) {
+  final trimmed = value.trim();
+  return trimmed.isEmpty ||
+      trimmed == '—' ||
+      trimmed == '--' ||
+      trimmed == '未登记学生';
+}
+
+/// 详情接口字段缺失时，用查寝历史列表行补全展示值。
+List<DormitoryDetailField> mergeDormitoryCheckDetailFields({
+  required List<DormitoryDetailField> fields,
+  required DormitoryCheckHistoryItem item,
+}) {
+  final fallback = <String, String>{
+    '学生姓名': item.studentName,
+    '学生学号': item.studentNo != '—' ? item.studentNo : '',
+    '手机号': item.mobile,
+    '查寝日期': item.checkDate,
+    '我的宿舍': item.dormName,
+    '我的床位': item.bedName.isEmpty ? '' : item.bedLabel,
+    '打卡时间': item.checkTime,
+    '查寝状态': item.statusLabel,
+    '查寝备注': item.remark,
+  };
+  return [
+    for (final field in fields)
+      DormitoryDetailField(
+        field.label,
+        _isEmptyDetailValue(field.value)
+            ? (fallback[field.label]?.trim().isNotEmpty == true
+                  ? fallback[field.label]!.trim()
+                  : field.value)
+            : field.value,
+      ),
+  ];
+}
+
+/// 详情接口无数据时，完全由列表行构造字段。
+List<DormitoryDetailField> buildDormitoryCheckDetailFieldsFromHistoryItem(
+  DormitoryCheckHistoryItem item,
+) {
+  return [
+    DormitoryDetailField(
+      '学生姓名',
+      item.studentName.isEmpty ? '—' : item.studentName,
+    ),
+    if (item.studentNo.isNotEmpty && item.studentNo != '—')
+      DormitoryDetailField('学生学号', item.studentNo),
+    if (item.mobile.isNotEmpty) DormitoryDetailField('手机号', item.mobile),
+    DormitoryDetailField(
+      '查寝日期',
+      item.checkDate.isEmpty ? '—' : item.checkDate,
+    ),
+    DormitoryDetailField(
+      '我的宿舍',
+      item.dormName.isEmpty ? '—' : item.dormName,
+    ),
+    DormitoryDetailField(
+      '我的床位',
+      item.bedName.isEmpty ? '—' : item.bedLabel,
+    ),
+    DormitoryDetailField(
+      '打卡时间',
+      item.checkTime.isEmpty ? '—' : item.checkTime,
+    ),
+    DormitoryDetailField(
+      '查寝状态',
+      item.statusLabel.isEmpty ? '—' : item.statusLabel,
+    ),
+    if (item.remark.isNotEmpty) DormitoryDetailField('查寝备注', item.remark),
+    if (item.handleStatus > 0)
+      DormitoryDetailField(
+        '处理状态',
+        item.handleStatus == 1 ? '已处理' : '待处理',
+      ),
+  ];
+}
+
 List<DormitoryDetailField> parseDormitoryCheckDetailFields(dynamic raw) {
   if (raw is! Map) return const [];
   var map = Map<String, dynamic>.from(raw);

@@ -23,11 +23,8 @@ class SegmentToggleOption {
 /// 统一的「两段（或多段）开关」分段控件。
 ///
 /// 视觉与动效统一参考 musicPlay「关闭 / 答案」切换：浅灰轨道 + 品牌紫滑块，
-/// 选中态白字、未选中黑字；切换时滑块用 [AnimatedAlign] 在各段之间平滑滑动
-/// （180ms / easeOut），选中文字字重/颜色用 [AnimatedDefaultTextStyle] 过渡。
-///
-/// 宽度按内容自适应（透明占位行撑开轨道宽度，避免 IntrinsicWidth + Expanded
-/// 导致宽度为 0）；适合放在页面右上角。
+/// 选中态白字、未选中黑字；切换时仅滑块用 [AnimatedAlign] 平滑滑动（180ms /
+/// easeOut）。文字颜色与字重随选中态即时切换，避免与滑块动画叠加产生闪烁。
 class SegmentToggle extends StatelessWidget {
   const SegmentToggle({
     super.key,
@@ -154,9 +151,10 @@ class _SegmentToggleItem extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              AnimatedDefaultTextStyle(
-                duration: SegmentToggle._duration,
-                curve: SegmentToggle._curve,
+              Text(
+                option.label,
+                maxLines: 1,
+                softWrap: false,
                 style: TextStyle(
                   color: textColor,
                   fontSize: ui(fontSize),
@@ -164,7 +162,6 @@ class _SegmentToggleItem extends StatelessWidget {
                   fontWeight: selected ? AppFont.w500 : AppFont.w400,
                   height: 1,
                 ),
-                child: Text(option.label, maxLines: 1, softWrap: false),
               ),
               if (option.badge != null && option.badge!.isNotEmpty) ...[
                 SizedBox(width: ui(6)),

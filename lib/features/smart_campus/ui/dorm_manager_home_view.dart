@@ -150,6 +150,7 @@ class _DormManagerHomeViewState extends ConsumerState<DormManagerHomeView> {
 
     return PageInitLoadingShell(
       loading: managerState.loadingHome,
+      scrimColor: Colors.transparent,
       child: LayoutBuilder(
         builder: (context, constraints) {
           var cw = constraints.maxWidth;

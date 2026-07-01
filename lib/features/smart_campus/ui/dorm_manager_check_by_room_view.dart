@@ -190,6 +190,7 @@ class _DormManagerCheckByRoomViewState
       color: _kPageBg,
       child: PageInitLoadingShell(
         loading: state.loadingRoomChecks && rooms.isEmpty,
+        scrimColor: Colors.transparent,
         child: SingleChildScrollView(
           padding: EdgeInsets.only(bottom: ui(20)),
           child: Column(

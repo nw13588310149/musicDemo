@@ -7,6 +7,19 @@ class DormitoryDetailField {
   final String value;
 }
 
+/// 查寝 / 补卡详情弹窗顶部的学生摘要（头像 + 姓名 + 副标题）。
+class DormitoryDetailStudentProfile {
+  const DormitoryDetailStudentProfile({
+    required this.name,
+    this.avatarUrl = '',
+    this.subtitle = '',
+  });
+
+  final String name;
+  final String avatarUrl;
+  final String subtitle;
+}
+
 class StudentDormitoryInfo {
   const StudentDormitoryInfo({
     this.buildingName = '',

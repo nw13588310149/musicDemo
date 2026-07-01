@@ -84,16 +84,21 @@ class PageInitLoadingShell extends StatelessWidget {
     super.key,
     required this.loading,
     required this.child,
+    this.scrimColor = const Color(0x59FFFFFF),
   });
 
   final bool loading;
   final Widget child;
+
+  /// loading 蒙层底色；传 [Colors.transparent] 可只保留居中指示器。
+  final Color scrimColor;
 
   @override
   Widget build(BuildContext context) {
     return MainContentLoadingShell(
       loading: loading,
       preserveChrome: true,
+      scrimColor: scrimColor,
       child: child,
     );
   }
@@ -110,12 +115,16 @@ class MainContentLoadingShell extends StatelessWidget {
     required this.child,
     this.preserveChrome = false,
     this.minHeight,
+    this.scrimColor = const Color(0x59FFFFFF),
   });
 
   final bool loading;
   final Widget child;
   final bool preserveChrome;
   final double? minHeight;
+
+  /// loading 蒙层底色；传 [Colors.transparent] 可只保留居中指示器。
+  final Color scrimColor;
 
   @override
   Widget build(BuildContext context) {
@@ -126,7 +135,9 @@ class MainContentLoadingShell extends StatelessWidget {
       return Stack(
         children: [
           child,
-          const Positioned.fill(child: AppLoadingOverlay()),
+          Positioned.fill(
+            child: AppLoadingOverlay(scrimColor: scrimColor),
+          ),
         ],
       );
     }
