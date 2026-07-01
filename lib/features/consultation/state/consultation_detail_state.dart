@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../data/consultation_cover.dart';
+
 @immutable
 class ConsultationDetailArgs {
   const ConsultationDetailArgs({required this.id, this.sourceName});
@@ -65,7 +67,7 @@ class ConsultationDetail {
   final int viewCount;
   final String htmlContent;
 
-  /// 详情页头部封面图（接口字段 shortText3）。
+  /// 详情/分享封面图（优先 img1 首图，回退 shortText3）。
   final String coverUrl;
 
   factory ConsultationDetail.fromJson(Map raw) {
@@ -78,7 +80,7 @@ class ConsultationDetail {
       updateTime: raw['updateTime']?.toString() ?? '',
       viewCount: _toInt(raw['viewCount']) ?? 0,
       htmlContent: raw['longText1']?.toString() ?? '',
-      coverUrl: raw['shortText3']?.toString() ?? '',
+      coverUrl: parseConsultationCoverUrl(raw),
     );
   }
 

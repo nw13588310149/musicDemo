@@ -26,7 +26,8 @@ class SegmentToggleOption {
 /// 选中态白字、未选中黑字；切换时滑块用 [AnimatedAlign] 在各段之间平滑滑动
 /// （180ms / easeOut），选中文字字重/颜色用 [AnimatedDefaultTextStyle] 过渡。
 ///
-/// 宽度按内容自适应：各段等宽（取使布局自洽的较宽一段），适合放在页面右上角。
+/// 宽度按内容自适应（透明占位行撑开轨道宽度，避免 IntrinsicWidth + Expanded
+/// 导致宽度为 0）；适合放在页面右上角。
 class SegmentToggle extends StatelessWidget {
   const SegmentToggle({
     super.key,
@@ -58,50 +59,68 @@ class SegmentToggle extends StatelessWidget {
     // 选中段 → 水平对齐（-1 最左、1 最右），两段时即 -1 / 1。
     final thumbAlignX = count <= 1 ? 0.0 : (safeIndex / (count - 1)) * 2 - 1;
 
-    return IntrinsicWidth(
-      child: Container(
-        height: ui(height),
-        padding: EdgeInsets.all(ui(2)),
-        decoration: BoxDecoration(
-          color: trackColor,
-          borderRadius: BorderRadius.circular(ui(8)),
-        ),
-        child: Stack(
-          children: [
-            // 滑块：宽度为 1/段数，靠 AnimatedAlign 在两端之间滑动。
-            Positioned.fill(
-              child: AnimatedAlign(
-                duration: _duration,
-                curve: _curve,
-                alignment: Alignment(thumbAlignX, 0),
-                child: FractionallySizedBox(
-                  widthFactor: count == 0 ? 1 : 1 / count,
-                  heightFactor: 1,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: thumbColor,
-                      borderRadius: BorderRadius.circular(ui(6)),
+    return Container(
+      height: ui(height),
+      padding: EdgeInsets.all(ui(2)),
+      decoration: BoxDecoration(
+        color: trackColor,
+        borderRadius: BorderRadius.circular(ui(8)),
+      ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final option in options)
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: ui(14)),
+                  child: Opacity(
+                    opacity: 0,
+                    child: Text(
+                      option.label,
+                      style: TextStyle(
+                        fontSize: ui(fontSize),
+                        fontFamily: 'PingFang SC',
+                        height: 1,
+                      ),
+                      maxLines: 1,
+                      softWrap: false,
                     ),
+                  ),
+                ),
+            ],
+          ),
+          Positioned.fill(
+            child: AnimatedAlign(
+              duration: _duration,
+              curve: _curve,
+              alignment: Alignment(thumbAlignX, 0),
+              child: FractionallySizedBox(
+                widthFactor: count == 0 ? 1 : 1 / count,
+                heightFactor: 1,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: thumbColor,
+                    borderRadius: BorderRadius.circular(ui(6)),
                   ),
                 ),
               ),
             ),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var i = 0; i < count; i++)
-                  Expanded(
-                    child: _SegmentToggleItem(
-                      option: options[i],
-                      selected: i == safeIndex,
-                      fontSize: fontSize,
-                      onTap: options[i].enabled ? () => onChanged(i) : null,
-                    ),
-                  ),
-              ],
-            ),
-          ],
-        ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < count; i++)
+                _SegmentToggleItem(
+                  option: options[i],
+                  selected: i == safeIndex,
+                  fontSize: fontSize,
+                  onTap: options[i].enabled ? () => onChanged(i) : null,
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }

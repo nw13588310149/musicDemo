@@ -2193,7 +2193,7 @@ class _ShortcutStatGrid extends StatelessWidget {
   }
 }
 
-// ----- 班级捷径（右：6 个紫色图标按钮 2x3） -----
+// ----- 班级捷径（右：紫色图标按钮，每行最多 3 个） -----
 
 class _QuickActionGrid extends StatelessWidget {
   const _QuickActionGrid({
@@ -2251,9 +2251,12 @@ class _QuickActionGrid extends StatelessWidget {
     };
   }
 
+  static const int _columns = 3;
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final rowCount = (_items.length + _columns - 1) ~/ _columns;
     return Container(
       width: double.infinity,
       height: fillHeight ? double.infinity : null,
@@ -2268,17 +2271,21 @@ class _QuickActionGrid extends StatelessWidget {
         mainAxisAlignment:
             fillHeight ? MainAxisAlignment.center : MainAxisAlignment.start,
         children: [
-          for (var row = 0; row < 2; row++) ...[
+          for (var row = 0; row < rowCount; row++) ...[
             if (row > 0) SizedBox(height: ui(12)),
             Row(
               children: [
-                for (var col = 0; col < 3; col++) ...[
+                for (var col = 0; col < _columns; col++) ...[
                   if (col > 0) SizedBox(width: ui(8)),
                   Expanded(
-                    child: _QuickActionTile(
-                      data: _items[row * 3 + col],
-                      onTap: _onTapForLabel(_items[row * 3 + col].label),
-                    ),
+                    child: row * _columns + col < _items.length
+                        ? _QuickActionTile(
+                            data: _items[row * _columns + col],
+                            onTap: _onTapForLabel(
+                              _items[row * _columns + col].label,
+                            ),
+                          )
+                        : const SizedBox.shrink(),
                   ),
                 ],
               ],

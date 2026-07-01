@@ -1204,69 +1204,82 @@ class _Banner extends StatelessWidget {
         ),
       ),
       child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          Positioned(
-            left: ui(12),
-            top: ui(15),
-            child: InkWell(
-              onTap: onBack,
-              borderRadius: BorderRadius.circular(ui(8)),
-              child: Container(
-                width: ui(32),
-                height: ui(32),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(ui(8)),
-                  border: Border.all(color: _kBorderSoft, width: 1),
-                ),
-                alignment: Alignment.center,
-                child: Icon(
-                  Icons.chevron_left_rounded,
-                  size: ui(20),
-                  color: const Color(0xFF1C274C),
+          // 标题区占满整条 banner，相对整栏居中；左右按钮不参与占位。
+          Positioned.fill(
+            child: Center(
+              child: Padding(
+                // 对称留白仅用于副标题省略，不影响相对整栏的水平居中。
+                padding: EdgeInsets.symmetric(horizontal: ui(180)),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '人脸库',
+                      style: TextStyle(
+                        fontSize: ui(16),
+                        color: _kTextDark,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w600,
+                        height: 1.2,
+                      ),
+                    ),
+                    SizedBox(height: ui(2)),
+                    Text(
+                      '掌握本班住宿生归宿与晨检结果，协同处理补卡与异常跟进。',
+                      style: TextStyle(
+                        fontSize: ui(12),
+                        color: _kTextHint,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w400,
+                        height: 1.2,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
-          Positioned.fill(
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: ui(180)),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    '人脸库',
-                    style: TextStyle(
-                      fontSize: ui(16),
-                      color: _kTextDark,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w600,
-                      height: 1.2,
-                    ),
+          Positioned(
+            left: ui(12),
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: InkWell(
+                onTap: onBack,
+                borderRadius: BorderRadius.circular(ui(8)),
+                child: Container(
+                  width: ui(32),
+                  height: ui(32),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(ui(8)),
+                    border: Border.all(color: _kBorderSoft, width: 1),
                   ),
-                  SizedBox(height: ui(2)),
-                  Text(
-                    '掌握本班住宿生归宿与晨检结果，协同处理补卡与异常跟进。',
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      color: _kTextHint,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w400,
-                      height: 1.4,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  alignment: Alignment.center,
+                  child: Icon(
+                    Icons.chevron_left_rounded,
+                    size: ui(20),
+                    color: const Color(0xFF1C274C),
                   ),
-                ],
+                ),
               ),
             ),
           ),
           Positioned(
             right: ui(12),
-            top: ui(15),
-            child: _BannerSegment(
-              currentTab: currentTab,
-              onSelectTab: onSelectTab,
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: _BannerSegment(
+                currentTab: currentTab,
+                onSelectTab: onSelectTab,
+              ),
             ),
           ),
         ],
@@ -1278,83 +1291,67 @@ class _Banner extends StatelessWidget {
 class _BannerSegment extends StatelessWidget {
   const _BannerSegment({required this.currentTab, required this.onSelectTab});
 
-  static const Duration _duration = Duration(milliseconds: 180);
-  static const Curve _curve = Curves.easeOut;
-
   final _FaceTab currentTab;
   final ValueChanged<_FaceTab> onSelectTab;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final selectedIndex = currentTab == _FaceTab.enroll ? 0 : 1;
-    final thumbAlignX = selectedIndex == 0 ? -1.0 : 1.0;
+    return Container(
+      height: ui(32),
+      padding: EdgeInsets.all(ui(2)),
+      decoration: BoxDecoration(
+        color: _kPanelBg,
+        borderRadius: BorderRadius.circular(ui(8)),
+        border: Border.all(color: _kBorderSoft),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final t in _FaceTab.values)
+            _FaceTabSegmentItem(
+              label: t.label,
+              selected: t == currentTab,
+              onTap: () => onSelectTab(t),
+            ),
+        ],
+      ),
+    );
+  }
+}
 
-    return IntrinsicWidth(
+class _FaceTabSegmentItem extends StatelessWidget {
+  const _FaceTabSegmentItem({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(ui(6)),
       child: Container(
-        // minHeight 而不是 fixed height：避免中文字 height:1 被切顶。
-        constraints: BoxConstraints(minHeight: ui(32)),
-        padding: EdgeInsets.all(ui(2)),
+        padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(5)),
         decoration: BoxDecoration(
-          color: _kPanelBg,
-          borderRadius: BorderRadius.circular(ui(8)),
+          color: selected ? _kTextDark : Colors.transparent,
+          borderRadius: BorderRadius.circular(ui(6)),
         ),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: AnimatedAlign(
-                duration: _duration,
-                curve: _curve,
-                alignment: Alignment(thumbAlignX, 0),
-                child: FractionallySizedBox(
-                  widthFactor: 0.5,
-                  heightFactor: 1,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: _kTextDark,
-                      borderRadius: BorderRadius.circular(ui(6)),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var i = 0; i < _FaceTab.values.length; i++)
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => onSelectTab(_FaceTab.values[i]),
-                      behavior: HitTestBehavior.opaque,
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: ui(16),
-                          vertical: ui(7),
-                        ),
-                        child: Center(
-                          child: AnimatedDefaultTextStyle(
-                            duration: _duration,
-                            curve: _curve,
-                            style: TextStyle(
-                              fontSize: ui(12),
-                              color: i == selectedIndex
-                                  ? Colors.white
-                                  : _kTextHint,
-                              fontFamily: 'PingFang SC',
-                              fontWeight: i == selectedIndex
-                                  ? AppFont.w500
-                                  : AppFont.w400,
-                              height: 1.2,
-                            ),
-                            child: Text(_FaceTab.values[i].label),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ],
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: ui(12),
+            color: selected ? Colors.white : _kTextHint,
+            fontFamily: 'PingFang SC',
+            fontWeight: selected ? AppFont.w500 : AppFont.w400,
+            height: 1.2,
+          ),
         ),
       ),
     );

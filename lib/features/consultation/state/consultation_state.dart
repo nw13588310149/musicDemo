@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../data/consultation_cover.dart';
+
 @immutable
 class ConsultationPageArgs {
   const ConsultationPageArgs({this.schoolMode = false, this.sourceName});
@@ -43,7 +45,7 @@ class ConsultationItem {
     return ConsultationItem(
       id: _toInt(raw['id']) ?? 0,
       title: raw['title']?.toString() ?? '',
-      coverUrl: raw['shortText3']?.toString() ?? '',
+      coverUrl: parseConsultationCoverUrl(raw),
       createTime: _toDate(raw['createTime']),
       viewCount: _toInt(raw['viewCount']) ?? 0,
     );
