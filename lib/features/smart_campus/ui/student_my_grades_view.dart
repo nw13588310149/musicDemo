@@ -98,6 +98,9 @@ const Color _kRiseGreen = Color(0xFF12CE51);
 const Color _kFallRed = Color(0xFFF04545);
 const Color _kAxisLabel = Color(0xFFB6B5BB);
 
+/// 标题栏右侧主切换控件统一高度（与查寝管理页一致）。
+const double _kBannerControlHeight = 32;
+
 // =============================================================================
 // 顶级视图
 // =============================================================================
@@ -311,13 +314,67 @@ class _MainTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SegmentToggle(
-      selectedIndex: selected == _MainTab.exams ? 0 : 1,
-      options: const [
-        SegmentToggleOption(label: '全部考试'),
-        SegmentToggleOption(label: '我的成绩'),
-      ],
-      onChanged: (i) => onSelected(i == 0 ? _MainTab.exams : _MainTab.grades),
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      constraints: BoxConstraints(minHeight: ui(_kBannerControlHeight)),
+      padding: EdgeInsets.all(ui(2)),
+      decoration: BoxDecoration(
+        color: _kInnerGray,
+        borderRadius: BorderRadius.circular(ui(8)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _BannerSectionTabItem(
+            label: '全部考试',
+            selected: selected == _MainTab.exams,
+            onTap: () => onSelected(_MainTab.exams),
+          ),
+          _BannerSectionTabItem(
+            label: '我的成绩',
+            selected: selected == _MainTab.grades,
+            onTap: () => onSelected(_MainTab.grades),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BannerSectionTabItem extends StatelessWidget {
+  const _BannerSectionTabItem({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(ui(6)),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(7)),
+        decoration: BoxDecoration(
+          color: selected ? _kTextDark : Colors.transparent,
+          borderRadius: BorderRadius.circular(ui(6)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: ui(12),
+            color: selected ? Colors.white : _kTextHint,
+            fontFamily: 'PingFang SC',
+            fontWeight: selected ? AppFont.w500 : AppFont.w400,
+            height: 1.2,
+          ),
+        ),
+      ),
     );
   }
 }

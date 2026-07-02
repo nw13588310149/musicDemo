@@ -78,6 +78,8 @@ class StudentCheckInView extends ConsumerStatefulWidget {
 
 class _StudentCheckInViewState extends ConsumerState<StudentCheckInView>
     with WidgetsBindingObserver {
+  _HistoryCourseKindFilter _recentCourseKind = _HistoryCourseKindFilter.small;
+
   @override
   void initState() {
     super.initState();
@@ -194,9 +196,13 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView>
     final ui = DashboardScaleScope.of(context).ui;
     final checkIn = ref.watch(studentCheckInControllerProvider);
     final selected = checkIn.selectedCourse;
-    final recentRecords = checkIn.recentRecords
+    final allRecentRecords = checkIn.recentRecords
         .map(_recentRecordFromItem)
         .toList(growable: false);
+    final recentRecords = _filterRecentRecordsByKind(
+      allRecentRecords,
+      _recentCourseKind,
+    );
 
     return SmartCampusSecondaryPageShell(
       backgroundColor: _kPageBg,
@@ -305,14 +311,30 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView>
                 },
               ),
               SizedBox(height: ui(28)),
-              _SectionTitle('最近课堂记录'),
+              Row(
+                children: [
+                  const _SectionTitle('最近课堂记录'),
+                  const Spacer(),
+                  _RecentCourseKindFilterTabs(
+                    selected: _recentCourseKind,
+                    onSelected: (kind) =>
+                        setState(() => _recentCourseKind = kind),
+                  ),
+                ],
+              ),
               SizedBox(height: ui(12)),
               if (recentRecords.isEmpty)
                 Padding(
                   padding: EdgeInsets.symmetric(vertical: ui(24)),
                   child: Center(
                     child: Text(
-                      checkIn.error.isNotEmpty ? checkIn.error : '暂无最近课堂记录',
+                      checkIn.error.isNotEmpty
+                          ? checkIn.error
+                          : allRecentRecords.isEmpty
+                          ? '暂无最近课堂记录'
+                          : _recentCourseKind == _HistoryCourseKindFilter.small
+                          ? '暂无小课记录'
+                          : '暂无大课记录',
                       style: TextStyle(
                         fontSize: ui(14),
                         color: _kTextHint,
@@ -1468,7 +1490,7 @@ class _RecentRecordCard extends StatelessWidget {
                 ),
               ),
             )
-          else
+          else if (data.isSmallCourse)
             _AttendStatsRow(
               startCard: data.startCard,
               endCard: data.endCard,
@@ -1740,6 +1762,66 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
+/// 「最近课堂记录」右侧大小课筛选（样式对齐「我的考试」[_ExamFilterTabs]）。
+class _RecentCourseKindFilterTabs extends StatelessWidget {
+  const _RecentCourseKindFilterTabs({
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final _HistoryCourseKindFilter selected;
+  final ValueChanged<_HistoryCourseKindFilter> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    Widget pill(_HistoryCourseKindFilter tab, String label) {
+      final active = selected == tab;
+      return GestureDetector(
+        onTap: () => onSelected(tab),
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          height: ui(32),
+          padding: EdgeInsets.symmetric(horizontal: ui(14)),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: active ? _kTextDark : Colors.transparent,
+            borderRadius: BorderRadius.circular(ui(6)),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: ui(13),
+              color: active ? Colors.white : _kTextSecondary,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w500,
+              height: 1,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      height: ui(40),
+      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(4)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(ui(8)),
+        border: Border.all(color: _kBorderSoft),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          pill(_HistoryCourseKindFilter.big, '大课'),
+          SizedBox(width: ui(6)),
+          pill(_HistoryCourseKindFilter.small, '小课'),
+        ],
+      ),
+    );
+  }
+}
+
 // =============================================================================
 // 「签到历史」右侧抽屉
 //
@@ -1784,6 +1866,8 @@ enum _HistoryStatusFilter { all, normal, absent }
 enum _HistoryCourseKindFilter { all, big, small }
 
 enum _MakeupStatusFilter { all, pending, approved, rejected }
+
+const double _kHistoryFilterControlHeight = 38;
 
 class _CheckInHistoryDrawer extends ConsumerStatefulWidget {
   const _CheckInHistoryDrawer({
@@ -1921,108 +2005,127 @@ class _CheckInHistoryDrawerState extends ConsumerState<_CheckInHistoryDrawer> {
               }
             },
           ),
-          if (_tab == _HistoryDrawerTab.signHistory) ...[
-            _HistoryFilterBar(
-              range: _historyRangeOf(_range),
-              selectedDate: _selectedDate,
-              courseKind: _courseKind,
-              status: _status,
-              onRangeChanged: (r) {
-                setState(() {
-                  _range = _apiRangeOf(r);
-                  _selectedDate = null;
-                });
-                unawaited(_reloadSignHistory());
-              },
-              onDateChanged: (date) {
-                setState(() => _selectedDate = date);
-                unawaited(_reloadSignHistory());
-              },
-              onCourseKindChanged: (kind) {
-                setState(() => _courseKind = kind);
-              },
-              onStatusChanged: (s) {
-                setState(() => _status = s);
-                unawaited(_reloadSignHistory());
-              },
-            ),
-            _HistorySummaryBar(
-              total: filtered.length,
-              normal: normalCount,
-              absent: absentCount,
-            ),
-            Expanded(
-              child: PageInitLoadingShell(
-                loading: checkIn.loadingHistory && filtered.isEmpty,
-                child: checkIn.loadingHistory && filtered.isEmpty
-                    ? const SizedBox.shrink()
-                    : filtered.isEmpty
-                    ? _HistoryEmpty(message: emptyMessage)
-                    : ListView.separated(
-                        padding: EdgeInsets.fromLTRB(
-                          ui(16),
-                          ui(12),
-                          ui(16),
-                          ui(20),
-                        ),
-                        itemCount: filteredEntries.length,
-                        separatorBuilder: (_, _) => SizedBox(height: ui(12)),
-                        itemBuilder: (ctx, i) {
-                          final entry = filteredEntries[i];
-                          final card = entry.card;
-                          final item = entry.item;
-                          return _RecentRecordCard(
-                            data: card,
-                            onApplyMakeup:
-                                _kStudentMakeupSignEnabled &&
-                                    card.status == _AttendanceStatus.absent
-                                ? () => widget.onApplyMakeup(item)
-                                : null,
-                          );
-                        },
+          Expanded(
+            child: IndexedStack(
+              index: _tab == _HistoryDrawerTab.signHistory ? 0 : 1,
+              sizing: StackFit.expand,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _HistoryFilterBar(
+                      range: _historyRangeOf(_range),
+                      selectedDate: _selectedDate,
+                      courseKind: _courseKind,
+                      status: _status,
+                      onRangeChanged: (r) {
+                        setState(() {
+                          _range = _apiRangeOf(r);
+                          _selectedDate = null;
+                        });
+                        unawaited(_reloadSignHistory());
+                      },
+                      onDateChanged: (date) {
+                        setState(() => _selectedDate = date);
+                        unawaited(_reloadSignHistory());
+                      },
+                      onCourseKindChanged: (kind) {
+                        setState(() => _courseKind = kind);
+                      },
+                      onStatusChanged: (s) {
+                        setState(() => _status = s);
+                        unawaited(_reloadSignHistory());
+                      },
+                    ),
+                    _HistorySummaryBar(
+                      total: filtered.length,
+                      normal: normalCount,
+                      absent: absentCount,
+                    ),
+                    Expanded(
+                      child: PageInitLoadingShell(
+                        loading: checkIn.loadingHistory,
+                        child: filtered.isEmpty
+                            ? (checkIn.loadingHistory
+                                  ? const SizedBox.shrink()
+                                  : _HistoryEmpty(message: emptyMessage))
+                            : ListView.separated(
+                                padding: EdgeInsets.fromLTRB(
+                                  ui(16),
+                                  ui(12),
+                                  ui(16),
+                                  ui(20),
+                                ),
+                                itemCount: filteredEntries.length,
+                                separatorBuilder: (_, _) =>
+                                    SizedBox(height: ui(12)),
+                                itemBuilder: (ctx, i) {
+                                  final entry = filteredEntries[i];
+                                  final card = entry.card;
+                                  final item = entry.item;
+                                  return _RecentRecordCard(
+                                    data: card,
+                                    onApplyMakeup:
+                                        _kStudentMakeupSignEnabled &&
+                                            card.status ==
+                                                _AttendanceStatus.absent
+                                        ? () => widget.onApplyMakeup(item)
+                                        : null,
+                                  );
+                                },
+                              ),
                       ),
-              ),
-            ),
-          ] else ...[
-            _MakeupFilterBar(
-              status: _makeupStatus,
-              onStatusChanged: (s) {
-                setState(() => _makeupStatus = s);
-                unawaited(_reloadMakeupList());
-              },
-            ),
-            _MakeupSummaryBar(total: makeupItems.length),
-            Expanded(
-              child: PageInitLoadingShell(
-                loading: checkIn.loadingMakeup && makeupItems.isEmpty,
-                child: checkIn.loadingMakeup && makeupItems.isEmpty
-                    ? const SizedBox.shrink()
-                    : makeupItems.isEmpty
-                    ? _HistoryEmpty(
-                        message: checkIn.makeupError.isNotEmpty
-                            ? checkIn.makeupError
-                            : '暂无补签申请',
-                      )
-                    : ListView.separated(
-                        padding: EdgeInsets.fromLTRB(
-                          ui(16),
-                          ui(12),
-                          ui(16),
-                          ui(20),
-                        ),
-                        itemCount: makeupItems.length,
-                        separatorBuilder: (_, _) => SizedBox(height: ui(12)),
-                        itemBuilder: (ctx, i) {
-                          final item = makeupItems[i];
-                          return _CourseSignMakeupCard(
-                            item: item,
-                            onTap: () => unawaited(_showMakeupDetail(item)),
-                          );
-                        },
+                    ),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _MakeupFilterBar(
+                      status: _makeupStatus,
+                      onStatusChanged: (s) {
+                        setState(() => _makeupStatus = s);
+                        unawaited(_reloadMakeupList());
+                      },
+                    ),
+                    _MakeupSummaryBar(total: makeupItems.length),
+                    Expanded(
+                      child: PageInitLoadingShell(
+                        loading: checkIn.loadingMakeup,
+                        child: makeupItems.isEmpty
+                            ? (checkIn.loadingMakeup
+                                  ? const SizedBox.shrink()
+                                  : _HistoryEmpty(
+                                      message: checkIn.makeupError.isNotEmpty
+                                          ? checkIn.makeupError
+                                          : '暂无补签申请',
+                                    ))
+                            : ListView.separated(
+                                padding: EdgeInsets.fromLTRB(
+                                  ui(16),
+                                  ui(12),
+                                  ui(16),
+                                  ui(20),
+                                ),
+                                itemCount: makeupItems.length,
+                                separatorBuilder: (_, _) =>
+                                    SizedBox(height: ui(12)),
+                                itemBuilder: (ctx, i) {
+                                  final item = makeupItems[i];
+                                  return _CourseSignMakeupCard(
+                                    item: item,
+                                    onTap: () =>
+                                        unawaited(_showMakeupDetail(item)),
+                                  );
+                                },
+                              ),
                       ),
-              ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -2088,26 +2191,13 @@ class _HistoryDrawerHeader extends StatelessWidget {
             ],
           ),
           SizedBox(height: ui(12)),
-          Container(
-            height: ui(34),
-            decoration: BoxDecoration(
-              color: _kInnerGray,
-              borderRadius: BorderRadius.circular(ui(10)),
-            ),
-            padding: EdgeInsets.all(ui(3)),
-            child: Row(
-              children: [
-                _HistoryDrawerTabButton(
-                  label: '签到历史',
-                  selected: tab == _HistoryDrawerTab.signHistory,
-                  onTap: () => onTabChanged(_HistoryDrawerTab.signHistory),
-                ),
-                _HistoryDrawerTabButton(
-                  label: '补签申请',
-                  selected: tab == _HistoryDrawerTab.makeup,
-                  onTap: () => onTabChanged(_HistoryDrawerTab.makeup),
-                ),
-              ],
+          _HistorySlidingToggle(
+            selectedIndex: tab == _HistoryDrawerTab.signHistory ? 0 : 1,
+            labels: const ['签到历史', '补签申请'],
+            onChanged: (index) => onTabChanged(
+              index == 0
+                  ? _HistoryDrawerTab.signHistory
+                  : _HistoryDrawerTab.makeup,
             ),
           ),
         ],
@@ -2116,52 +2206,101 @@ class _HistoryDrawerHeader extends StatelessWidget {
   }
 }
 
-class _HistoryDrawerTabButton extends StatelessWidget {
-  const _HistoryDrawerTabButton({
-    required this.label,
-    required this.selected,
-    required this.onTap,
+class _HistorySlidingToggle extends StatelessWidget {
+  const _HistorySlidingToggle({
+    required this.selectedIndex,
+    required this.labels,
+    required this.onChanged,
   });
 
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
+  final int selectedIndex;
+  final List<String> labels;
+  final ValueChanged<int> onChanged;
+
+  static const Duration _duration = Duration(milliseconds: 180);
+  static const Curve _curve = Curves.easeOut;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Expanded(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          curve: Curves.easeOut,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: selected ? Colors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(ui(8)),
-            boxShadow: selected
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 6,
-                      offset: const Offset(0, 1),
-                    ),
-                  ]
-                : const [],
+    final count = labels.length;
+    final safeIndex = count == 0 ? 0 : selectedIndex.clamp(0, count - 1);
+    final thumbAlignX = count <= 1 ? 0.0 : (safeIndex / (count - 1)) * 2 - 1;
+    final textStyle = TextStyle(
+      fontSize: ui(13),
+      fontFamily: 'PingFang SC',
+      height: 1,
+    );
+
+    return Container(
+      height: ui(_kHistoryFilterControlHeight),
+      decoration: BoxDecoration(
+        color: _kInnerGray,
+        borderRadius: BorderRadius.circular(ui(10)),
+      ),
+      padding: EdgeInsets.all(ui(3)),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Row(
+            children: [
+              for (final label in labels)
+                Expanded(
+                  child: Opacity(
+                    opacity: 0,
+                    child: Text(label, style: textStyle, maxLines: 1),
+                  ),
+                ),
+            ],
           ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: ui(13),
-              color: selected ? _kPurple : _kTextSecondary,
-              fontFamily: 'PingFang SC',
-              fontWeight: selected ? AppFont.w500 : AppFont.w400,
-              height: 1,
+          Positioned.fill(
+            child: AnimatedAlign(
+              duration: _duration,
+              curve: _curve,
+              alignment: Alignment(thumbAlignX, 0),
+              child: FractionallySizedBox(
+                widthFactor: count == 0 ? 1 : 1 / count,
+                heightFactor: 1,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(ui(8)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 6,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
+          Row(
+            children: [
+              for (var i = 0; i < count; i++)
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => onChanged(i),
+                    child: Center(
+                      child: Text(
+                        labels[i],
+                        maxLines: 1,
+                        style: textStyle.copyWith(
+                          color: i == safeIndex ? _kPurple : _kTextSecondary,
+                          fontWeight: i == safeIndex
+                              ? AppFont.w500
+                              : AppFont.w400,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -2280,7 +2419,7 @@ class _HistoryFilterBar extends StatelessWidget {
           ),
           SizedBox(height: ui(14)),
           Container(
-            height: ui(34),
+            height: ui(_kHistoryFilterControlHeight),
             decoration: BoxDecoration(
               color: _kInnerGray,
               borderRadius: BorderRadius.circular(ui(10)),
@@ -2349,7 +2488,7 @@ class _HistoryDatePickerField extends StatelessWidget {
       },
       borderRadius: BorderRadius.circular(ui(8)),
       child: Container(
-        height: ui(36),
+        height: ui(_kHistoryFilterControlHeight),
         padding: EdgeInsets.symmetric(horizontal: ui(12)),
         decoration: BoxDecoration(
           color: Colors.white,
@@ -2411,7 +2550,7 @@ class _HistoryRangePill extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(ui(8)),
         child: Container(
-          height: ui(32),
+          height: ui(_kHistoryFilterControlHeight),
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: selected ? _kPurple : Colors.white,
@@ -2452,9 +2591,7 @@ class _HistoryStatusTab extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          curve: Curves.easeOut,
+        child: Container(
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: selected ? Colors.white : Colors.transparent,
@@ -2467,7 +2604,7 @@ class _HistoryStatusTab extends StatelessWidget {
                       offset: const Offset(0, 1),
                     ),
                   ]
-                : const [],
+                : null,
           ),
           child: Text(
             label,
@@ -2613,7 +2750,7 @@ class _MakeupFilterBar extends StatelessWidget {
           ),
           SizedBox(height: ui(8)),
           Container(
-            height: ui(34),
+            height: ui(_kHistoryFilterControlHeight),
             decoration: BoxDecoration(
               color: _kInnerGray,
               borderRadius: BorderRadius.circular(ui(10)),
@@ -3073,6 +3210,19 @@ String? _timeOnly(String? raw) {
   if (trimmed.isEmpty) return null;
   final match = RegExp(r'(\d{1,2}:\d{2}(?::\d{2})?)').firstMatch(trimmed);
   return match?.group(1) ?? trimmed;
+}
+
+List<_RecentRecordData> _filterRecentRecordsByKind(
+  List<_RecentRecordData> records,
+  _HistoryCourseKindFilter kind,
+) {
+  return switch (kind) {
+    _HistoryCourseKindFilter.all => records,
+    _HistoryCourseKindFilter.big =>
+      records.where((r) => !r.isSmallCourse).toList(growable: false),
+    _HistoryCourseKindFilter.small =>
+      records.where((r) => r.isSmallCourse).toList(growable: false),
+  };
 }
 
 _RecentRecordData _recentRecordFromItem(

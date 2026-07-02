@@ -392,14 +392,27 @@ class _InboxCard extends StatelessWidget {
             ],
           ),
           SizedBox(height: ui(10)),
-          Text(
-            item.submitterLabel,
-            style: TextStyle(
-              fontSize: ui(14),
-              color: _kTextDark,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w600,
-            ),
+          Row(
+            children: [
+              if (!item.isAnonymous) ...[
+                _SubmitterAvatar(
+                  name: item.submitterLabel,
+                  avatarUrl: item.submitterHeadUrl,
+                ),
+                SizedBox(width: ui(10)),
+              ],
+              Expanded(
+                child: Text(
+                  item.submitterLabel,
+                  style: TextStyle(
+                    fontSize: ui(14),
+                    color: _kTextDark,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w600,
+                  ),
+                ),
+              ),
+            ],
           ),
           if (item.studentNo.isNotEmpty) ...[
             SizedBox(height: ui(4)),
@@ -639,6 +652,50 @@ class _ReplyButton extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _SubmitterAvatar extends StatelessWidget {
+  const _SubmitterAvatar({required this.name, required this.avatarUrl});
+
+  final String name;
+  final String avatarUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final initial = name.isNotEmpty ? name.characters.first : '·';
+    final placeholder = Container(
+      width: ui(36),
+      height: ui(36),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: const Color(0xFFDAD2FF),
+        borderRadius: BorderRadius.circular(ui(8)),
+      ),
+      child: Text(
+        initial,
+        style: TextStyle(
+          fontSize: ui(14),
+          height: 1.0,
+          fontWeight: AppFont.w600,
+          color: _kPurple,
+          fontFamily: 'PingFang SC',
+        ),
+      ),
+    );
+    final url = avatarUrl.trim();
+    if (url.isEmpty) return placeholder;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(ui(8)),
+      child: Image.network(
+        url,
+        width: ui(36),
+        height: ui(36),
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => placeholder,
       ),
     );
   }

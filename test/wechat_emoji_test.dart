@@ -5,6 +5,7 @@ import 'package:the_road_of_music_flutter/core/widgets/wechat_emoji.dart';
 void main() {
   test('uses the mini-program panel order and atlas coordinates', () {
     expect(WechatEmoji.names, hasLength(108));
+    expect(kWechatEmojiCategories, hasLength(6));
     expect(WechatEmoji.tokenForIndex(0), '[微笑]');
     expect(WechatEmoji.indexForToken('[红包]'), 107);
 

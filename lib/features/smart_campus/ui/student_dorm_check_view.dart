@@ -736,19 +736,13 @@ class _DormCardsGrid extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(ui(12)),
         ),
-        child: Column(
-          children: [
-            Icon(Icons.inbox_outlined, size: ui(48), color: _kTextHint),
-            SizedBox(height: ui(8)),
-            Text(
-              '当前筛选下没有查寝记录',
-              style: TextStyle(
-                fontSize: ui(13),
-                color: _kTextSecondary,
-                fontFamily: 'PingFang SC',
-              ),
-            ),
-          ],
+        child: Text(
+          '当前筛选下没有查寝记录',
+          style: TextStyle(
+            fontSize: ui(13),
+            color: _kTextSecondary,
+            fontFamily: 'PingFang SC',
+          ),
         ),
       );
     }

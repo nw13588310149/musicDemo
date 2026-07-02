@@ -1,6 +1,7 @@
 /// 校长端「校长信箱」收件箱：列表解析与状态枚举。
 library;
 
+import '../../../core/network/media_url.dart';
 import '../../../core/network/snowflake_id.dart';
 
 enum PrincipalInboxStatus {
@@ -32,6 +33,7 @@ class PrincipalInboxItem {
     required this.createTime,
     required this.isAnonymous,
     required this.submitterName,
+    required this.submitterHeadUrl,
     required this.studentNo,
     required this.attachments,
     required this.replyContent,
@@ -45,6 +47,7 @@ class PrincipalInboxItem {
   final String createTime;
   final bool isAnonymous;
   final String submitterName;
+  final String submitterHeadUrl;
   final String studentNo;
   final List<String> attachments;
   final String replyContent;
@@ -114,6 +117,7 @@ List<PrincipalInboxItem> parsePrincipalInboxList(dynamic raw) {
           'attachments',
           'attachment',
         ]);
+        final user = _pickNestedUserMap(map);
         return PrincipalInboxItem(
           id: readSnowflakeId(map['id']) ?? map['id']?.toString() ?? '',
           msgType: _pickString(map, const ['msgType', 'type']),
@@ -125,13 +129,9 @@ List<PrincipalInboxItem> parsePrincipalInboxList(dynamic raw) {
             'createdAt',
           ]),
           isAnonymous: _asInt(map['isAnonymous']) == 1,
-          submitterName: _pickString(map, const [
-            'studentName',
-            'realname',
-            'userName',
-            'submitUserName',
-          ]),
-          studentNo: _pickString(map, const ['studentNo', 'userNo']),
+          submitterName: _pickSubmitterName(map, user),
+          submitterHeadUrl: _pickSubmitterHeadUrl(map, user),
+          studentNo: _pickStudentNo(map, user),
           attachments: attachmentsRaw
               .split(',')
               .map((s) => s.trim())
@@ -179,4 +179,51 @@ String _pickString(Map<String, dynamic> map, List<String> keys) {
     if (text.isNotEmpty && text != 'null') return text;
   }
   return '';
+}
+
+Map<String, dynamic> _pickNestedUserMap(Map<String, dynamic> map) {
+  final user = map['user'];
+  if (user is Map) return Map<String, dynamic>.from(user);
+  return const {};
+}
+
+String _pickSubmitterName(
+  Map<String, dynamic> map,
+  Map<String, dynamic> user,
+) {
+  final topLevel = _pickString(map, const [
+    'studentName',
+    'realname',
+    'userName',
+    'submitUserName',
+  ]);
+  if (topLevel.isNotEmpty) return topLevel;
+  final realname = _pickString(user, const ['realname', 'realName']);
+  if (realname.isNotEmpty) return realname;
+  final nickname = _pickString(user, const ['nickname', 'nickName']);
+  if (nickname.isNotEmpty) return nickname;
+  return '';
+}
+
+String _pickStudentNo(Map<String, dynamic> map, Map<String, dynamic> user) {
+  final no = _pickString(map, const ['studentNo', 'userNo']);
+  if (no.isNotEmpty) return no;
+  return _pickString(user, const ['studentNo', 'no', 'userNo']);
+}
+
+String _pickSubmitterHeadUrl(
+  Map<String, dynamic> map,
+  Map<String, dynamic> user,
+) {
+  final raw = _pickString(map, const ['studentHeadUrl', 'headUrl', 'avatar']);
+  if (raw.isEmpty) {
+    final fromUser = _pickString(user, const [
+      'headUrl',
+      'avatar',
+      'avatarUrl',
+    ]);
+    if (fromUser.isEmpty) return '';
+    return MediaUrl.resolve(fromUser);
+  }
+  return MediaUrl.resolve(raw);
 }

@@ -60,6 +60,7 @@ import '../data/schedule_teaching_week.dart';
 import '../state/smart_campus_controller.dart';
 import 'widgets/schedule_color_swatch_picker.dart';
 import 'widgets/schedule_course_card.dart';
+import 'widgets/schedule_grid_shell.dart';
 import 'widgets/schedule_idle_slot.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -72,7 +73,6 @@ const Color _kBorderSoft = Color(0xFFF3F2F3);
 const Color _kTextDark = Color(0xFF0B081A);
 const Color _kTextSecondary = Color(0xFF6D6B75);
 const Color _kTextHint = Color(0xFFB6B5BB);
-const Color _kTextDivider = Color(0xFFCECED1);
 const Color _kPurple = Color(0xFF8741FF);
 const Color _kCheckboxBorder = Color(0xFFCECED1);
 
@@ -85,11 +85,6 @@ const Color _kApplyPendingBg = Color(0xFFFFEDD3);
 const Color _kApplyPendingFg = Color(0xFFFF6A00);
 const Color _kApplyRejectedBg = Color(0xFFFFE5E5);
 const Color _kApplyRejectedFg = Color(0xFFE83A3A);
-
-// 列与行尺寸
-const double _kTimeColWidth = 120;
-const double _kDayColWidth = 200;
-const double _kHeaderHeight = 60;
 
 enum _ScheduleMode { view, edit }
 
@@ -153,31 +148,8 @@ class _ApplyContext {
   final List<String> studentIds;
 }
 
-class _TimeSlotData {
-  const _TimeSlotData({
-    required this.start,
-    required this.end,
-    required this.height,
-  });
-
-  final String start;
-  final String end;
-  final double height;
-}
-
-class _DayHeaderData {
-  const _DayHeaderData({
-    required this.weekdayLabel,
-    required this.dateLabel,
-    required this.date,
-    this.today = false,
-  });
-
-  final String weekdayLabel;
-  final String dateLabel;
-  final DateTime date;
-  final bool today;
-}
+typedef _TimeSlotData = ScheduleGridTimeSlot;
+typedef _DayHeaderData = ScheduleGridDayHeader;
 
 /// 节次时间配置（来自 `schoolTimeConfigList`）。
 class _TimeConfig {
@@ -228,8 +200,8 @@ class _TeacherLessonScheduleViewState
 
   _ScheduleMode _mode = _ScheduleMode.view;
 
-  final GlobalKey<_ScheduleGridState> _scheduleGridKey =
-      GlobalKey<_ScheduleGridState>();
+  final GlobalKey<ScheduleGridShellState> _scheduleGridKey =
+      GlobalKey<ScheduleGridShellState>();
 
   /// 班级列表第一项 id（来自 teacher `/teacher/classList`，已基于 token
   /// 过滤为「我教的班级」）。仅用于驱动 `schoolTimeConfigList` 拉对应班级
@@ -361,18 +333,14 @@ class _TeacherLessonScheduleViewState
       slotIdx = (focus.lineNum - 1).clamp(0, configs.length - 1);
     }
 
-    final cells = _normalizeCells(_serverCells);
-    final slots = _buildSlots(cells);
-
     for (var attempt = 0; attempt < 4; attempt++) {
       await WidgetsBinding.instance.endOfFrame;
       if (!mounted) return;
       final grid = _scheduleGridKey.currentState;
       if (grid != null &&
-          grid.scrollToSlot(
+          grid.scrollToDaySlot(
             dayIdx: dayIdx,
             slotIdx: slotIdx,
-            slots: slots,
           )) {
         break;
       }
@@ -1190,13 +1158,17 @@ class _TeacherLessonScheduleViewState
           Expanded(
             child: Padding(
               padding: EdgeInsets.fromLTRB(ui(20), ui(0), ui(20), ui(20)),
-              child: _ScheduleGrid(
+              child: ScheduleGridShell(
                 key: _scheduleGridKey,
-                mode: _mode,
                 slots: slots,
                 days: days,
-                cells: cells,
-                onApplySmallLesson: _onApplySmallLesson,
+                body: _DaysBodyArea(
+                  mode: _mode,
+                  slots: slots,
+                  days: days,
+                  cells: cells,
+                  onApplySmallLesson: _onApplySmallLesson,
+                ),
               ),
             ),
           ),
@@ -1623,287 +1595,8 @@ class _ChevronButton extends StatelessWidget {
 }
 
 // =============================================================================
-// 网格主体：时间列（左，冻结）+ 日期区（右，横滚动）
+// 日期区：多行课卡
 // =============================================================================
-
-class _ScheduleGrid extends StatefulWidget {
-  const _ScheduleGrid({
-    super.key,
-    required this.mode,
-    required this.slots,
-    required this.days,
-    required this.cells,
-    required this.onApplySmallLesson,
-  });
-
-  final _ScheduleMode mode;
-  final List<_TimeSlotData> slots;
-  final List<_DayHeaderData> days;
-  final List<List<List<_ScheduleCardData>>> cells;
-  final void Function(int dayIdx, int slotIdx) onApplySmallLesson;
-
-  @override
-  State<_ScheduleGrid> createState() => _ScheduleGridState();
-}
-
-class _ScheduleGridState extends State<_ScheduleGrid> {
-  final ScrollController _verticalController = ScrollController();
-  final ScrollController _horizontalController = ScrollController();
-  final ScrollController _headerHorizontalController = ScrollController();
-  bool _syncingHorizontal = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _horizontalController.addListener(_syncHeaderHorizontalScroll);
-  }
-
-  void _syncHeaderHorizontalScroll() {
-    if (_syncingHorizontal || !_headerHorizontalController.hasClients) return;
-    _syncingHorizontal = true;
-    _headerHorizontalController.jumpTo(_horizontalController.offset);
-    _syncingHorizontal = false;
-  }
-
-  @override
-  void dispose() {
-    _horizontalController.removeListener(_syncHeaderHorizontalScroll);
-    _verticalController.dispose();
-    _horizontalController.dispose();
-    _headerHorizontalController.dispose();
-    super.dispose();
-  }
-
-  bool scrollToSlot({
-    required int dayIdx,
-    required int slotIdx,
-    required List<_TimeSlotData> slots,
-  }) {
-    if (!_verticalController.hasClients || !_horizontalController.hasClients) {
-      return false;
-    }
-    final ui = DashboardScaleScope.of(context).ui;
-
-    var verticalOffset = 0.0;
-    for (var i = 0; i < slotIdx && i < slots.length; i++) {
-      verticalOffset += ui(slots[i].height);
-    }
-    final maxVertical = _verticalController.position.maxScrollExtent;
-    _verticalController.jumpTo(verticalOffset.clamp(0.0, maxVertical));
-
-    final dayOffset = ui(_kDayColWidth) * dayIdx;
-    final viewportWidth = _horizontalController.position.viewportDimension;
-    final maxHorizontal = _horizontalController.position.maxScrollExtent;
-    final centered = dayOffset - (viewportWidth - ui(_kDayColWidth)) / 2;
-    _horizontalController.jumpTo(centered.clamp(0.0, maxHorizontal));
-    _syncHeaderHorizontalScroll();
-    return true;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final daysWidth = ui(_kDayColWidth) * widget.days.length;
-
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(ui(12)),
-        border: Border.all(color: _kBorderSoft),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(ui(12)),
-        child: Column(
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: ui(_kTimeColWidth),
-                  child: const _TimeHeader(),
-                ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    controller: _headerHorizontalController,
-                    physics: const NeverScrollableScrollPhysics(),
-                    child: SizedBox(
-                      width: daysWidth,
-                      child: _DaysHeaderRow(days: widget.days),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                controller: _verticalController,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _TimeColumnBody(slots: widget.slots),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        controller: _horizontalController,
-                        child: SizedBox(
-                          width: daysWidth,
-                          child: _DaysBodyArea(
-                            mode: widget.mode,
-                            slots: widget.slots,
-                            days: widget.days,
-                            cells: widget.cells,
-                            onApplySmallLesson: widget.onApplySmallLesson,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TimeColumnBody extends StatelessWidget {
-  const _TimeColumnBody({required this.slots});
-
-  final List<_TimeSlotData> slots;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return SizedBox(
-      width: ui(_kTimeColWidth),
-      child: Column(
-        children: [
-          for (final slot in slots)
-            Container(
-              width: double.infinity,
-              height: ui(slot.height),
-              decoration: const BoxDecoration(
-                border: Border(
-                  right: BorderSide(color: _kBorderSoft),
-                  bottom: BorderSide(color: _kBorderSoft),
-                ),
-              ),
-              alignment: Alignment.center,
-              child: _TimeRange(start: slot.start, end: slot.end),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TimeHeader extends StatelessWidget {
-  const _TimeHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      width: double.infinity,
-      height: ui(_kHeaderHeight),
-      decoration: const BoxDecoration(
-        color: _kInnerGray,
-        border: Border(
-          right: BorderSide(color: _kBorderSoft),
-          bottom: BorderSide(color: _kBorderSoft),
-        ),
-      ),
-      child: Stack(
-        children: [
-          Positioned.fill(child: CustomPaint(painter: _DiagonalLinePainter())),
-          Positioned(
-            right: ui(20),
-            top: ui(10),
-            child: Text(
-              '日期',
-              style: TextStyle(
-                fontSize: ui(12),
-                color: Colors.black,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w400,
-                height: 1,
-              ),
-            ),
-          ),
-          Positioned(
-            left: ui(20),
-            bottom: ui(12),
-            child: Text(
-              '节次',
-              style: TextStyle(
-                fontSize: ui(12),
-                color: Colors.black,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w400,
-                height: 1,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DiagonalLinePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = _kBorderSoft
-      ..strokeWidth = 1;
-    canvas.drawLine(Offset.zero, Offset(size.width, size.height), paint);
-  }
-
-  @override
-  bool shouldRepaint(_DiagonalLinePainter oldDelegate) => false;
-}
-
-class _TimeRange extends StatelessWidget {
-  const _TimeRange({required this.start, required this.end});
-
-  final String start;
-  final String end;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          start,
-          style: TextStyle(
-            fontSize: ui(14),
-            color: _kTextDark,
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w400,
-            height: 16 / 14,
-          ),
-        ),
-        SizedBox(height: ui(8)),
-        Container(width: ui(12), height: 1, color: _kTextDivider),
-        SizedBox(height: ui(8)),
-        Text(
-          end,
-          style: TextStyle(
-            fontSize: ui(14),
-            color: _kTextDark,
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w400,
-            height: 16 / 14,
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 class _DaysBodyArea extends StatelessWidget {
   const _DaysBodyArea({
@@ -1942,65 +1635,6 @@ class _DaysBodyArea extends StatelessWidget {
   }
 }
 
-class _DaysHeaderRow extends StatelessWidget {
-  const _DaysHeaderRow({required this.days});
-
-  final List<_DayHeaderData> days;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return SizedBox(
-      height: ui(_kHeaderHeight),
-      child: Row(
-        children: [
-          for (var i = 0; i < days.length; i++)
-            Container(
-              width: ui(_kDayColWidth),
-              height: ui(_kHeaderHeight),
-              decoration: BoxDecoration(
-                color: days[i].today ? Colors.white : _kInnerGray,
-                border: Border(
-                  bottom: const BorderSide(color: _kBorderSoft),
-                  left: i == 0
-                      ? BorderSide.none
-                      : const BorderSide(color: _kBorderSoft),
-                ),
-              ),
-              alignment: Alignment.center,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    days[i].weekdayLabel,
-                    style: TextStyle(
-                      fontSize: ui(14),
-                      color: _kTextDark,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w500,
-                      height: 1,
-                    ),
-                  ),
-                  SizedBox(height: ui(4)),
-                  Text(
-                    days[i].dateLabel,
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      color: _kTextHint,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w400,
-                      height: 1,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
 class _DayBodyRow extends StatelessWidget {
   const _DayBodyRow({
     required this.slotIdx,
@@ -2029,7 +1663,7 @@ class _DayBodyRow extends StatelessWidget {
         children: [
           for (var i = 0; i < rowCells.length; i++)
             SizedBox(
-              width: ui(_kDayColWidth),
+              width: ui(kScheduleGridDayColWidth),
               height: ui(height),
               child: Stack(
                 children: [

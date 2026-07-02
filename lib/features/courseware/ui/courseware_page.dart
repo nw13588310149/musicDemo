@@ -1936,7 +1936,7 @@ class _UploadKindOption extends StatelessWidget {
 
   final String label;
   final bool selected;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -3685,6 +3685,15 @@ const int _kThumbDecodeMaxPx = 200;
 /// 图片 / 谱例 / 课件在「未选文件」时上传区域的统一高度（设计稿逻辑 px）。
 const double _kUploadEmptyZoneHeight = 140;
 
+/// 已选文件列表（图片网格 / 谱例区等）的最大可视高度；超出后区域内滚动，
+/// 避免弹窗被撑高把底部「取消 / 确认」顶出屏幕。
+const double _kUploadListMaxHeight = 220;
+
+/// 上传图片网格每行个数与间距（设计稿逻辑 px）。
+const int _kUploadImageGridColumns = 4;
+const double _kUploadImageGridSpacing = 8;
+const double _kUploadImageGridPadding = 10;
+
 /// 把字节数转成「12.5MB」/「1.2GB」形式，给提示用。
 String _formatUploadSize(int bytes) {
   if (bytes <= 0) return '0B';
@@ -3770,6 +3779,10 @@ class _UploadDialogState extends State<_UploadDialog> {
 
   bool _confirming = false;
 
+  /// 系统选择器已确认、但尚未把所选文件转成上传槽位前的过渡态。
+  /// 多选图片时读取/校验可能耗时，避免对话框仍停在「空选区」像卡住一样。
+  bool _picking = false;
+
   @override
   void dispose() {
     _titleCtrl.dispose();
@@ -3799,6 +3812,8 @@ class _UploadDialogState extends State<_UploadDialog> {
     }
   }
 
+  bool get _pickDisabled => _picking || _anyUploading;
+
   // ── file picking ──────────────────────────────────────────────────────────
 
   /// 体积超限 / 选取异常时统一弹一条 toast。提取出来是因为
@@ -3823,39 +3838,94 @@ class _UploadDialogState extends State<_UploadDialog> {
 
   /// 主选取（image / score 多选追加图片；courseware 单文件覆盖）。
   Future<void> _pick() async {
-    final allowMultiple =
-        _kind == CloudUploadKind.image || _kind == CloudUploadKind.score;
-    // 图片 / 谱例选图直接走 image 类型 — 移动端会拉起相册而不是文件管理。
-    final pickType =
-        (_kind == CloudUploadKind.image || _kind == CloudUploadKind.score)
-        ? CoursewarePickType.image
-        : CoursewarePickType.any;
-    // 选取本身可能在 iOS 上抛 native exception（DRM 音频、被 dismiss
-    // 的 picker、照片库授权异常等），try/catch 兜底防止一路冒到根
-    // zone handler 引发闪退。
-    final List<CoursewarePickedFile> files;
+    if (_picking) return;
+    setState(() => _picking = true);
     try {
-      files = await pickCoursewareFiles(
-        allowMultiple: allowMultiple,
-        type: pickType,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      AppToast.show(context, '文件选择失败：${_describeError(e)}');
-      return;
+      final allowMultiple =
+          _kind == CloudUploadKind.image || _kind == CloudUploadKind.score;
+      // 图片 / 谱例选图直接走 image 类型 — 移动端会拉起相册而不是文件管理。
+      final pickType =
+          (_kind == CloudUploadKind.image || _kind == CloudUploadKind.score)
+          ? CoursewarePickType.image
+          : CoursewarePickType.any;
+      // 选取本身可能在 iOS 上抛 native exception（DRM 音频、被 dismiss
+      // 的 picker、照片库授权异常等），try/catch 兜底防止一路冒到根
+      // zone handler 引发闪退。
+      final List<CoursewarePickedFile> files;
+      try {
+        files = await pickCoursewareFiles(
+          allowMultiple: allowMultiple,
+          type: pickType,
+        );
+      } catch (e) {
+        if (!mounted) return;
+        AppToast.show(context, '文件选择失败：${_describeError(e)}');
+        return;
+      }
+      if (files.isEmpty || !mounted) return;
+
+      final imageMode =
+          _kind == CloudUploadKind.image || _kind == CloudUploadKind.score;
+      final limit = imageMode ? _kMaxImageBytes : _kMaxFileBytes;
+
+      final newSlots = <_UploadSlot>[];
+      for (final f in files) {
+        final size = _slotSizeBytes(f);
+        if (size != null && size > limit) {
+          _notifyOversize(f.name, size, limit);
+          continue;
+        }
+        final slot = _UploadSlot(
+          name: f.name,
+          bytes: f.bytes,
+          path: f.path,
+          size: f.size,
+        );
+        if (!slot.canUpload) continue;
+        newSlots.add(slot);
+      }
+      if (newSlots.isEmpty || !mounted) return;
+
+      setState(() {
+        if (_kind == CloudUploadKind.courseware) {
+          _slots
+            ..clear()
+            ..addAll(newSlots.take(1));
+        } else {
+          _slots.addAll(newSlots);
+        }
+      });
+
+      for (final slot in newSlots) {
+        unawaited(_startUpload(slot));
+      }
+    } finally {
+      if (mounted) setState(() => _picking = false);
     }
-    if (files.isEmpty || !mounted) return;
+  }
 
-    final imageMode =
-        _kind == CloudUploadKind.image || _kind == CloudUploadKind.score;
-    final limit = imageMode ? _kMaxImageBytes : _kMaxFileBytes;
-
-    final newSlots = <_UploadSlot>[];
-    for (final f in files) {
+  /// 谱例专用：选取单个音频文件。
+  Future<void> _pickScoreAudio() async {
+    if (_picking) return;
+    setState(() => _picking = true);
+    try {
+      final List<CoursewarePickedFile> files;
+      try {
+        files = await pickCoursewareFiles(
+          allowMultiple: false,
+          type: CoursewarePickType.audio,
+        );
+      } catch (e) {
+        if (!mounted) return;
+        AppToast.show(context, '音频选择失败：${_describeError(e)}');
+        return;
+      }
+      if (files.isEmpty || !mounted) return;
+      final f = files.first;
       final size = _slotSizeBytes(f);
-      if (size != null && size > limit) {
-        _notifyOversize(f.name, size, limit);
-        continue;
+      if (size != null && size > _kMaxFileBytes) {
+        _notifyOversize(f.name, size, _kMaxFileBytes);
+        return;
       }
       final slot = _UploadSlot(
         name: f.name,
@@ -3863,55 +3933,12 @@ class _UploadDialogState extends State<_UploadDialog> {
         path: f.path,
         size: f.size,
       );
-      if (!slot.canUpload) continue;
-      newSlots.add(slot);
-    }
-    if (newSlots.isEmpty) return;
-
-    setState(() {
-      if (_kind == CloudUploadKind.courseware) {
-        _slots
-          ..clear()
-          ..addAll(newSlots.take(1));
-      } else {
-        _slots.addAll(newSlots);
-      }
-    });
-
-    for (final slot in newSlots) {
+      if (!slot.canUpload || !mounted) return;
+      setState(() => _scoreAudio = slot);
       unawaited(_startUpload(slot));
+    } finally {
+      if (mounted) setState(() => _picking = false);
     }
-  }
-
-  /// 谱例专用：选取单个音频文件。
-  Future<void> _pickScoreAudio() async {
-    final List<CoursewarePickedFile> files;
-    try {
-      files = await pickCoursewareFiles(
-        allowMultiple: false,
-        type: CoursewarePickType.audio,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      AppToast.show(context, '音频选择失败：${_describeError(e)}');
-      return;
-    }
-    if (files.isEmpty || !mounted) return;
-    final f = files.first;
-    final size = _slotSizeBytes(f);
-    if (size != null && size > _kMaxFileBytes) {
-      _notifyOversize(f.name, size, _kMaxFileBytes);
-      return;
-    }
-    final slot = _UploadSlot(
-      name: f.name,
-      bytes: f.bytes,
-      path: f.path,
-      size: f.size,
-    );
-    if (!slot.canUpload) return;
-    setState(() => _scoreAudio = slot);
-    unawaited(_startUpload(slot));
   }
 
   Future<void> _startUpload(_UploadSlot slot) async {
@@ -4048,14 +4075,23 @@ class _UploadDialogState extends State<_UploadDialog> {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final mediaSize = MediaQuery.sizeOf(context);
+    final maxDialogHeight = mediaSize.height - ui(48);
 
     final canConfirm = _canConfirm;
+    final dialogPadding = EdgeInsets.fromLTRB(ui(20), ui(25), ui(20), ui(20));
+    final uploadZone = switch (_kind) {
+      CloudUploadKind.image => _buildImageZone(ui),
+      CloudUploadKind.score => _buildScoreZone(ui),
+      CloudUploadKind.courseware => _buildFileZone(ui),
+    };
 
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: EdgeInsets.symmetric(horizontal: ui(32), vertical: ui(24)),
       child: Container(
         width: ui(420),
+        constraints: BoxConstraints(maxHeight: maxDialogHeight),
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           gradient: const LinearGradient(
@@ -4077,151 +4113,175 @@ class _UploadDialogState extends State<_UploadDialog> {
                 fit: BoxFit.fitWidth,
               ),
             ),
-            SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(ui(20), ui(25), ui(20), ui(20)),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ── title ──
-                  Center(
-                    child: Text('上传课件', style: appDialogTitleTextStyle(ui)),
-                  ),
-                  SizedBox(
-                    height: ui(appDialogGapBeforeFirstInput(topInset: 25)),
-                  ),
-
-                  // ── courseware title input ──
-                  SizedBox(
-                    height: ui(45),
-                    child: AppTextField(
-                      controller: _titleCtrl,
-                      cursorColor: const Color(0xFF8741FF),
-                      cursorWidth: 1.5,
-                      cursorHeight: ui(16),
-                      style: TextStyle(
-                        fontSize: ui(14),
-                        color: const Color(0xFF0B081A),
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w400,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: '请输入课件标题',
-                        hintStyle: TextStyle(
-                          fontSize: ui(14),
-                          color: const Color(0xFFB6B5BB),
-                          fontFamily: 'PingFang SC',
-                          fontWeight: AppFont.w400,
-                          height: 12 / 14,
-                        ),
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: ui(13),
-                          vertical: ui(12),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(ui(12)),
-                          borderSide: BorderSide(
-                            color: const Color(0xFFF3F2F3),
-                            width: ui(1),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: dialogPadding.copyWith(bottom: 0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // ── title ──
+                        Center(
+                          child: Text(
+                            '上传课件',
+                            style: appDialogTitleTextStyle(ui),
                           ),
                         ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(ui(12)),
-                          borderSide: BorderSide(
-                            color: const Color(0xFFD9C7FF),
-                            width: ui(1),
+                        SizedBox(
+                          height: ui(
+                            appDialogGapBeforeFirstInput(topInset: 25),
                           ),
                         ),
-                      ),
+
+                        // ── courseware title input ──
+                        SizedBox(
+                          height: ui(45),
+                          child: AppTextField(
+                            controller: _titleCtrl,
+                            cursorColor: const Color(0xFF8741FF),
+                            cursorWidth: 1.5,
+                            cursorHeight: ui(16),
+                            style: TextStyle(
+                              fontSize: ui(14),
+                              color: const Color(0xFF0B081A),
+                              fontFamily: 'PingFang SC',
+                              fontWeight: AppFont.w400,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: '请输入课件标题',
+                              hintStyle: TextStyle(
+                                fontSize: ui(14),
+                                color: const Color(0xFFB6B5BB),
+                                fontFamily: 'PingFang SC',
+                                fontWeight: AppFont.w400,
+                                height: 12 / 14,
+                              ),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: ui(13),
+                                vertical: ui(12),
+                              ),
+                              filled: true,
+                              fillColor: Colors.white,
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(ui(12)),
+                                borderSide: BorderSide(
+                                  color: const Color(0xFFF3F2F3),
+                                  width: ui(1),
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(ui(12)),
+                                borderSide: BorderSide(
+                                  color: const Color(0xFFD9C7FF),
+                                  width: ui(1),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: ui(18)),
+
+                        // ── kind selector ──
+                        Text(
+                          '选择分类',
+                          style: TextStyle(
+                            fontSize: ui(14),
+                            color: const Color(0xFF0B081A),
+                            fontFamily: 'PingFang SC',
+                            fontWeight: AppFont.w500,
+                            height: 12 / 14,
+                          ),
+                        ),
+                        SizedBox(height: ui(12)),
+                        Row(
+                          children: CloudUploadKind.values.map((item) {
+                            final label = switch (item) {
+                              CloudUploadKind.image => '图片',
+                              CloudUploadKind.score => '谱例',
+                              CloudUploadKind.courseware => '课件',
+                            };
+                            return Padding(
+                              padding: EdgeInsets.only(
+                                right: item == CloudUploadKind.courseware
+                                    ? 0
+                                    : ui(13),
+                              ),
+                              child: _UploadKindOption(
+                                label: label,
+                                selected: item == _kind,
+                                onTap: _picking
+                                    ? null
+                                    : () => setState(() {
+                                        _kind = item;
+                                        _slots.clear();
+                                        _scoreAudio = null;
+                                      }),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                        SizedBox(height: ui(18)),
+
+                        // ── upload zone header ──
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              '上传文件',
+                              style: TextStyle(
+                                fontSize: ui(14),
+                                color: const Color(0xFF0B081A),
+                                fontFamily: 'PingFang SC',
+                                fontWeight: AppFont.w500,
+                                height: 1.0,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              _kind.uploadTip,
+                              style: TextStyle(
+                                fontSize: ui(12),
+                                color: const Color(0xFFCECED1),
+                                fontFamily: 'PingFang SC',
+                                fontWeight: AppFont.w400,
+                                height: 1.0,
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: ui(10)),
+
+                        // ── upload zone（高度受限，列表过长时区域内滚动）──
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxHeight: ui(_kUploadListMaxHeight),
+                          ),
+                          child: SingleChildScrollView(
+                            child: uploadZone,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  SizedBox(height: ui(18)),
-
-                  // ── kind selector ──
-                  Text(
-                    '选择分类',
-                    style: TextStyle(
-                      fontSize: ui(14),
-                      color: const Color(0xFF0B081A),
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w500,
-                      height: 12 / 14,
-                    ),
+                ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    dialogPadding.left,
+                    ui(20),
+                    dialogPadding.right,
+                    dialogPadding.bottom,
                   ),
-                  SizedBox(height: ui(12)),
-                  Row(
-                    children: CloudUploadKind.values.map((item) {
-                      final label = switch (item) {
-                        CloudUploadKind.image => '图片',
-                        CloudUploadKind.score => '谱例',
-                        CloudUploadKind.courseware => '课件',
-                      };
-                      return Padding(
-                        padding: EdgeInsets.only(
-                          right: item == CloudUploadKind.courseware
-                              ? 0
-                              : ui(13),
-                        ),
-                        child: _UploadKindOption(
-                          label: label,
-                          selected: item == _kind,
-                          onTap: () => setState(() {
-                            _kind = item;
-                            _slots.clear();
-                            _scoreAudio = null;
-                          }),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  SizedBox(height: ui(18)),
-
-                  // ── upload zone header ──
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        '上传文件',
-                        style: TextStyle(
-                          fontSize: ui(14),
-                          color: const Color(0xFF0B081A),
-                          fontFamily: 'PingFang SC',
-                          fontWeight: AppFont.w500,
-                          height: 1.0,
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        _kind.uploadTip,
-                        style: TextStyle(
-                          fontSize: ui(12),
-                          color: const Color(0xFFCECED1),
-                          fontFamily: 'PingFang SC',
-                          fontWeight: AppFont.w400,
-                          height: 1.0,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: ui(10)),
-
-                  // ── upload zone ──
-                  switch (_kind) {
-                    CloudUploadKind.image => _buildImageZone(ui),
-                    CloudUploadKind.score => _buildScoreZone(ui),
-                    CloudUploadKind.courseware => _buildFileZone(ui),
-                  },
-
-                  SizedBox(height: ui(20)),
-                  AppDialogActionBar(
+                  child: AppDialogActionBar(
                     onCancel: () => Navigator.of(context).pop(),
                     onConfirm: _confirm,
                     confirmEnabled: canConfirm,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ],
         ),
@@ -4231,19 +4291,115 @@ class _UploadDialogState extends State<_UploadDialog> {
 
   // ── image grid zone ───────────────────────────────────────────────────────
 
-  Widget _buildImageZone(double Function(double) ui) {
-    final tileSize = ui(76);
-    final radius = BorderRadius.circular(ui(8));
+  Widget _buildPickingIndicator(double Function(double) ui) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AppLoadingIndicator(
+          size: ui(28),
+          strokeWidth: ui(2.5),
+          color: const Color(0xFF8741FF),
+        ),
+        SizedBox(height: ui(8)),
+        Text(
+          '正在处理所选文件…',
+          style: TextStyle(
+            fontSize: ui(13),
+            color: const Color(0xFF8741FF),
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w400,
+          ),
+        ),
+      ],
+    );
+  }
 
-    final tiles = <Widget>[
-      // existing slots
-      ..._slots.map((slot) => _buildImageTile(slot, tileSize, radius, ui)),
-      // "add more" button
-      GestureDetector(
-        onTap: _anyUploading ? null : _pick,
+  Widget _wrapUploadZoneWithPicking(
+    Widget child,
+    double Function(double) ui, {
+    double? minHeight,
+  }) {
+    if (!_picking) return child;
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        child,
+        Positioned.fill(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(ui(12)),
+            child: Container(
+              color: Colors.white.withValues(alpha: 0.78),
+              alignment: Alignment.center,
+              child: minHeight != null
+                  ? SizedBox(
+                      height: ui(minHeight),
+                      child: Center(child: _buildPickingIndicator(ui)),
+                    )
+                  : _buildPickingIndicator(ui),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildImageZone(double Function(double) ui) {
+    // If nothing uploaded yet, show original empty-state look inside the zone
+    if (_slots.isEmpty) {
+      return _wrapUploadZoneWithPicking(
+        GestureDetector(
+          onTap: _pickDisabled ? null : _pick,
+          child: Container(
+            width: double.infinity,
+            height: ui(_kUploadEmptyZoneHeight),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF4F4FF),
+              borderRadius: BorderRadius.circular(ui(12)),
+              border: Border.all(color: const Color(0xFFF3F2F3), width: ui(1)),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Image.asset(
+                  AppAssets.coursewareUploadFile,
+                  width: ui(56),
+                  height: ui(56),
+                  fit: BoxFit.contain,
+                ),
+                SizedBox(height: ui(8)),
+                _uploadHintText('图片', ui),
+              ],
+            ),
+          ),
+        ),
+        ui,
+        minHeight: _kUploadEmptyZoneHeight,
+      );
+    }
+
+    return _wrapUploadZoneWithPicking(_buildUploadImageGridShell(ui), ui);
+  }
+
+  double _uploadImageGridTileSize(
+    double maxWidth,
+    double Function(double) ui,
+  ) {
+    final spacing = ui(_kUploadImageGridSpacing);
+    final gaps = _kUploadImageGridColumns - 1;
+    return (maxWidth - spacing * gaps) / _kUploadImageGridColumns;
+  }
+
+  Widget _buildUploadAddTile(
+    double tileSize,
+    BorderRadius radius,
+    double Function(double) ui,
+  ) {
+    return GestureDetector(
+      onTap: _pickDisabled ? null : _pick,
+      child: SizedBox(
+        width: tileSize,
+        height: tileSize,
         child: Container(
-          width: tileSize,
-          height: tileSize,
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: radius,
@@ -4270,46 +4426,38 @@ class _UploadDialogState extends State<_UploadDialog> {
           ),
         ),
       ),
-    ];
+    );
+  }
 
-    // If nothing uploaded yet, show original empty-state look inside the zone
-    if (_slots.isEmpty) {
-      return GestureDetector(
-        onTap: _pick,
-        child: Container(
-          width: double.infinity,
-          height: ui(_kUploadEmptyZoneHeight),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF4F4FF),
-            borderRadius: BorderRadius.circular(ui(12)),
-            border: Border.all(color: const Color(0xFFF3F2F3), width: ui(1)),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Image.asset(
-                AppAssets.coursewareUploadFile,
-                width: ui(56),
-                height: ui(56),
-                fit: BoxFit.contain,
-              ),
-              SizedBox(height: ui(8)),
-              _uploadHintText('图片', ui),
-            ],
-          ),
-        ),
-      );
-    }
+  Widget _buildUploadImageGridShell(double Function(double) ui) {
+    final radius = BorderRadius.circular(ui(8));
+    final spacing = ui(_kUploadImageGridSpacing);
+    final padding = ui(_kUploadImageGridPadding);
 
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(ui(10)),
+      padding: EdgeInsets.all(padding),
       decoration: BoxDecoration(
         color: const Color(0xFFF4F4FF),
         borderRadius: BorderRadius.circular(ui(12)),
         border: Border.all(color: const Color(0xFFF3F2F3), width: ui(1)),
       ),
-      child: Wrap(spacing: ui(8), runSpacing: ui(8), children: tiles),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final tileSize = _uploadImageGridTileSize(constraints.maxWidth, ui);
+          final tiles = <Widget>[
+            ..._slots.map(
+              (slot) => _buildImageTile(slot, tileSize, radius, ui),
+            ),
+            _buildUploadAddTile(tileSize, radius, ui),
+          ];
+          return Wrap(
+            spacing: spacing,
+            runSpacing: spacing,
+            children: tiles,
+          );
+        },
+      ),
     );
   }
 
@@ -4471,92 +4619,46 @@ class _UploadDialogState extends State<_UploadDialog> {
   /// 与 1.0 的 `param2`（音频）+ `param3`（图片数组）保持一致：上传后
   /// 音频走 `_scoreAudio`，图片走 `_slots`，提交时一并组装为 score 类型。
   Widget _buildScoreZone(double Function(double) ui) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // 双区上传卡片：等宽两列。
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: _ScoreUploadCell(
-                ui: ui,
-                label: '音频',
-                iconAsset: AppAssets.coursewareUploadFile,
-                onTap: _anyUploading ? null : _pickScoreAudio,
-              ),
-            ),
-            SizedBox(width: ui(16)),
-            Expanded(
-              child: _ScoreUploadCell(
-                ui: ui,
-                label: '图片',
-                iconAsset: AppAssets.coursewareUploadImage,
-                onTap: _anyUploading ? null : _pick,
-              ),
-            ),
-          ],
-        ),
-        // 已选音频文件：在卡片下方以单行槽样式展示进度/完成/重试。
-        if (_scoreAudio != null) ...[
-          SizedBox(height: ui(10)),
-          _buildFileSlot(_scoreAudio!, ui),
-        ],
-        // 已选图片：与 image 类型保持同一 76×76 网格 + “+” 加号瓦片样式。
-        if (_slots.isNotEmpty) ...[
-          SizedBox(height: ui(10)),
-          _buildScoreImageGrid(ui),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildScoreImageGrid(double Function(double) ui) {
-    final tileSize = ui(76);
-    final radius = BorderRadius.circular(ui(8));
-    final tiles = <Widget>[
-      ..._slots.map((slot) => _buildImageTile(slot, tileSize, radius, ui)),
-      GestureDetector(
-        onTap: _anyUploading ? null : _pick,
-        child: Container(
-          width: tileSize,
-          height: tileSize,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: radius,
-            border: Border.all(color: const Color(0xFFD9C7FF), width: ui(1)),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+    return _wrapUploadZoneWithPicking(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 双区上传卡片：等宽两列。
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                Icons.add_rounded,
-                color: const Color(0xFF8741FF),
-                size: ui(22),
+              Expanded(
+                child: _ScoreUploadCell(
+                  ui: ui,
+                  label: '音频',
+                  iconAsset: AppAssets.coursewareUploadFile,
+                  onTap: _pickDisabled ? null : _pickScoreAudio,
+                ),
               ),
-              SizedBox(height: ui(2)),
-              Text(
-                '添加',
-                style: TextStyle(
-                  fontSize: ui(13),
-                  color: const Color(0xFF8741FF),
-                  fontFamily: 'PingFang SC',
+              SizedBox(width: ui(16)),
+              Expanded(
+                child: _ScoreUploadCell(
+                  ui: ui,
+                  label: '图片',
+                  iconAsset: AppAssets.coursewareUploadImage,
+                  onTap: _pickDisabled ? null : _pick,
                 ),
               ),
             ],
           ),
-        ),
+          // 已选音频文件：在卡片下方以单行槽样式展示进度/完成/重试。
+          if (_scoreAudio != null) ...[
+            SizedBox(height: ui(10)),
+            _buildFileSlot(_scoreAudio!, ui),
+          ],
+          // 已选图片：与 image 类型保持同一 4 列自适应网格 + “+” 加号瓦片。
+          if (_slots.isNotEmpty) ...[
+            SizedBox(height: ui(10)),
+            _buildUploadImageGridShell(ui),
+          ],
+        ],
       ),
-    ];
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(ui(10)),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF4F4FF),
-        borderRadius: BorderRadius.circular(ui(12)),
-        border: Border.all(color: const Color(0xFFF3F2F3), width: ui(1)),
-      ),
-      child: Wrap(spacing: ui(8), runSpacing: ui(8), children: tiles),
+      ui,
     );
   }
 
@@ -4570,30 +4672,34 @@ class _UploadDialogState extends State<_UploadDialog> {
     };
 
     if (_slots.isEmpty) {
-      return GestureDetector(
-        onTap: _pick,
-        child: Container(
-          width: double.infinity,
-          height: ui(_kUploadEmptyZoneHeight),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF4F4FF),
-            borderRadius: BorderRadius.circular(ui(12)),
-            border: Border.all(color: const Color(0xFFF3F2F3), width: ui(1)),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Image.asset(
-                AppAssets.coursewareUploadImage,
-                width: ui(56),
-                height: ui(56),
-                fit: BoxFit.contain,
-              ),
-              SizedBox(height: ui(8)),
-              _uploadHintText(uploadLabel, ui),
-            ],
+      return _wrapUploadZoneWithPicking(
+        GestureDetector(
+          onTap: _pickDisabled ? null : _pick,
+          child: Container(
+            width: double.infinity,
+            height: ui(_kUploadEmptyZoneHeight),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF4F4FF),
+              borderRadius: BorderRadius.circular(ui(12)),
+              border: Border.all(color: const Color(0xFFF3F2F3), width: ui(1)),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Image.asset(
+                  AppAssets.coursewareUploadImage,
+                  width: ui(56),
+                  height: ui(56),
+                  fit: BoxFit.contain,
+                ),
+                SizedBox(height: ui(8)),
+                _uploadHintText(uploadLabel, ui),
+              ],
+            ),
           ),
         ),
+        ui,
+        minHeight: _kUploadEmptyZoneHeight,
       );
     }
 

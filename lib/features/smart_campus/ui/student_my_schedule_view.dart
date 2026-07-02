@@ -38,6 +38,7 @@ import '../data/schedule_course_card_builder.dart';
 import '../data/schedule_slot_time.dart';
 import '../data/schedule_teaching_week.dart';
 import 'widgets/schedule_course_card.dart';
+import 'widgets/schedule_grid_shell.dart';
 import 'widgets/schedule_idle_slot.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -45,18 +46,10 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 // ---- 通用配色 ---------------------------------------------------------------
 
 const Color _kCardBg = Colors.white;
-const Color _kInnerGray = Color(0xFFF5F6FA);
 const Color _kBorderSoft = Color(0xFFF3F2F3);
-const Color _kBorderHair = Color(0xFFEFEFEF);
 const Color _kTextDark = Color(0xFF0B081A);
 const Color _kTextHint = Color(0xFFB6B5BB);
-const Color _kTextDivider = Color(0xFFCECED1);
 const Color _kPurple = Color(0xFF8741FF);
-
-// 列与行尺寸
-const double _kTimeColWidth = 120;
-const double _kDayColWidth = 200;
-const double _kHeaderHeight = 60;
 
 class _TimeConfig {
   const _TimeConfig({
@@ -255,7 +248,7 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
     _loadSchedule();
   }
 
-  List<_DayHeaderData> _buildDayHeaders() {
+  List<ScheduleGridDayHeader> _buildDayHeaders() {
     final today = DateTime.now();
     const labels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
     return [
@@ -266,7 +259,7 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
               d.year == today.year &&
               d.month == today.month &&
               d.day == today.day;
-          return _DayHeaderData(
+          return ScheduleGridDayHeader(
             weekdayLabel: labels[i],
             dateLabel:
                 '${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}',
@@ -277,11 +270,13 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
     ];
   }
 
-  List<_TimeSlotData> _buildSlots(List<List<List<ScheduleCourseCardData>>> cells) {
+  List<ScheduleGridTimeSlot> _buildSlots(
+    List<List<List<ScheduleCourseCardData>>> cells,
+  ) {
     final configs = _activeTimeConfigs;
     return [
       for (var i = 0; i < configs.length; i++)
-        _TimeSlotData(
+        ScheduleGridTimeSlot(
           start: configs[i].start,
           end: configs[i].end,
           height: _calcSlotHeight(i, cells),
@@ -347,10 +342,14 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
         padding: EdgeInsets.fromLTRB(ui(20), ui(11), ui(20), ui(20)),
         child: PageInitLoadingShell(
           loading: _scheduleLoading && _serverCells == null,
-          child: _ScheduleGrid(
+          child: ScheduleGridShell(
             slots: slots,
             days: days,
-            cells: cells,
+            body: _DaysBodyArea(
+              slots: slots,
+              days: days,
+              cells: cells,
+            ),
           ),
         ),
       ),
@@ -654,267 +653,7 @@ class _ChevronButton extends StatelessWidget {
 }
 
 // =============================================================================
-// 网格主体：时间列（左，冻结）+ 日期区（右，横滚动）
-// =============================================================================
-
-class _ScheduleGrid extends StatefulWidget {
-  const _ScheduleGrid({
-    required this.slots,
-    required this.days,
-    required this.cells,
-  });
-
-  final List<_TimeSlotData> slots;
-
-  /// 7 个日期表头数据
-  final List<_DayHeaderData> days;
-
-  /// 7 列 × N 行的格子数据。`cells[dayIndex][slotIndex]` 是该格的课卡列表
-  /// （0、1 或 2 张；2 张时纵向堆叠，需要对应 slot 的高度足以容纳）。
-  final List<List<List<ScheduleCourseCardData>>> cells;
-
-  @override
-  State<_ScheduleGrid> createState() => _ScheduleGridState();
-}
-
-class _ScheduleGridState extends State<_ScheduleGrid> {
-  final ScrollController _verticalController = ScrollController();
-  final ScrollController _horizontalController = ScrollController();
-  final ScrollController _headerHorizontalController = ScrollController();
-  bool _syncingHorizontal = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _horizontalController.addListener(_syncHeaderHorizontalScroll);
-  }
-
-  void _syncHeaderHorizontalScroll() {
-    if (_syncingHorizontal || !_headerHorizontalController.hasClients) return;
-    _syncingHorizontal = true;
-    _headerHorizontalController.jumpTo(_horizontalController.offset);
-    _syncingHorizontal = false;
-  }
-
-  @override
-  void dispose() {
-    _horizontalController.removeListener(_syncHeaderHorizontalScroll);
-    _verticalController.dispose();
-    _horizontalController.dispose();
-    _headerHorizontalController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-
-    final daysWidth = ui(_kDayColWidth) * widget.days.length;
-
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(ui(12)),
-        border: Border.all(color: _kBorderSoft),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(ui(12)),
-        child: Column(
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: ui(_kTimeColWidth),
-                  child: const _TimeHeader(),
-                ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    controller: _headerHorizontalController,
-                    physics: const NeverScrollableScrollPhysics(),
-                    child: SizedBox(
-                      width: daysWidth,
-                      child: _DaysHeaderRow(days: widget.days),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                controller: _verticalController,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _TimeColumnBody(slots: widget.slots),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        controller: _horizontalController,
-                        child: SizedBox(
-                          width: daysWidth,
-                          child: _DaysBodyArea(
-                            slots: widget.slots,
-                            days: widget.days,
-                            cells: widget.cells,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// =============================================================================
-// 时间列（冻结）
-// =============================================================================
-
-class _TimeColumnBody extends StatelessWidget {
-  const _TimeColumnBody({required this.slots});
-
-  final List<_TimeSlotData> slots;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return SizedBox(
-      width: ui(_kTimeColWidth),
-      child: Column(
-        children: [
-          for (final slot in slots)
-            Container(
-              width: double.infinity,
-              height: ui(slot.height),
-              decoration: const BoxDecoration(
-                border: Border(
-                  right: BorderSide(color: _kBorderSoft),
-                  bottom: BorderSide(color: _kBorderSoft),
-                ),
-              ),
-              alignment: Alignment.center,
-              child: _TimeRange(start: slot.start, end: slot.end),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TimeHeader extends StatelessWidget {
-  const _TimeHeader();
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      width: double.infinity,
-      height: ui(_kHeaderHeight),
-      decoration: const BoxDecoration(
-        color: _kInnerGray,
-        border: Border(
-          right: BorderSide(color: _kBorderSoft),
-          bottom: BorderSide(color: _kBorderSoft),
-        ),
-      ),
-      child: Stack(
-        children: [
-          // 27° 斜分割线
-          Positioned.fill(child: CustomPaint(painter: _DiagonalLinePainter())),
-          Positioned(
-            right: ui(20),
-            top: ui(10),
-            child: Text(
-              '日期',
-              style: TextStyle(
-                fontSize: ui(12),
-                color: Colors.black,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w400,
-                height: 1,
-              ),
-            ),
-          ),
-          Positioned(
-            left: ui(20),
-            bottom: ui(12),
-            child: Text(
-              '节次',
-              style: TextStyle(
-                fontSize: ui(12),
-                color: Colors.black,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w400,
-                height: 1,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DiagonalLinePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = _kBorderHair
-      ..strokeWidth = 1;
-    canvas.drawLine(Offset.zero, Offset(size.width, size.height), paint);
-  }
-
-  @override
-  bool shouldRepaint(_DiagonalLinePainter oldDelegate) => false;
-}
-
-class _TimeRange extends StatelessWidget {
-  const _TimeRange({required this.start, required this.end});
-
-  final String start;
-  final String end;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          start,
-          style: TextStyle(
-            fontSize: ui(14),
-            color: _kTextDark,
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w400,
-            height: 16 / 14,
-          ),
-        ),
-        SizedBox(height: ui(8)),
-        Container(width: ui(12), height: 1, color: _kTextDivider),
-        SizedBox(height: ui(8)),
-        Text(
-          end,
-          style: TextStyle(
-            fontSize: ui(14),
-            color: _kTextDark,
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w400,
-            height: 16 / 14,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// =============================================================================
-// 日期区：表头 + 多行课卡
+// 日期区：多行课卡
 // =============================================================================
 
 class _DaysBodyArea extends StatelessWidget {
@@ -924,8 +663,8 @@ class _DaysBodyArea extends StatelessWidget {
     required this.cells,
   });
 
-  final List<_TimeSlotData> slots;
-  final List<_DayHeaderData> days;
+  final List<ScheduleGridTimeSlot> slots;
+  final List<ScheduleGridDayHeader> days;
   final List<List<List<ScheduleCourseCardData>>> cells;
 
   @override
@@ -947,67 +686,6 @@ class _DaysBodyArea extends StatelessWidget {
   }
 }
 
-class _DaysHeaderRow extends StatelessWidget {
-  const _DaysHeaderRow({required this.days});
-
-  final List<_DayHeaderData> days;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return SizedBox(
-      height: ui(_kHeaderHeight),
-      child: Row(
-        children: [
-          for (var i = 0; i < days.length; i++)
-            Container(
-              width: ui(_kDayColWidth),
-              height: ui(_kHeaderHeight),
-              decoration: BoxDecoration(
-                // 当天（默认 i==0 周一）走白底，其余 #F5F6FA
-                color: days[i].today ? Colors.white : _kInnerGray,
-                border: Border(
-                  bottom: BorderSide(color: _kBorderHair),
-                  // 第一列在最左侧不需要左边框
-                  left: i == 0
-                      ? BorderSide.none
-                      : const BorderSide(color: _kBorderHair),
-                ),
-              ),
-              alignment: Alignment.center,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    days[i].weekdayLabel,
-                    style: TextStyle(
-                      fontSize: ui(14),
-                      color: _kTextDark,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w500,
-                      height: 1,
-                    ),
-                  ),
-                  SizedBox(height: ui(6)),
-                  Text(
-                    days[i].dateLabel,
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      color: _kTextHint,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w400,
-                      height: 1,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
 class _DayBodyRow extends StatelessWidget {
   const _DayBodyRow({
     required this.slotEnd,
@@ -1018,7 +696,7 @@ class _DayBodyRow extends StatelessWidget {
 
   final String slotEnd;
   final double height;
-  final List<_DayHeaderData> days;
+  final List<ScheduleGridDayHeader> days;
   final List<List<ScheduleCourseCardData>> rowCells;
 
   @override
@@ -1030,7 +708,7 @@ class _DayBodyRow extends StatelessWidget {
         children: [
           for (var i = 0; i < rowCells.length; i++)
             SizedBox(
-              width: ui(_kDayColWidth),
+              width: ui(kScheduleGridDayColWidth),
               height: ui(height),
               // 用 Stack overlay 画底/左边线，避免 BoxDecoration.border 把
               // 子可用高度从 slot.height 减掉 1px——精确填满（120/222
@@ -1101,34 +779,4 @@ class _CellContent extends StatelessWidget {
       ),
     );
   }
-}
-
-// =============================================================================
-// 数据模型
-// =============================================================================
-
-class _TimeSlotData {
-  const _TimeSlotData({
-    required this.start,
-    required this.end,
-    required this.height,
-  });
-
-  final String start;
-  final String end;
-  final double height;
-}
-
-class _DayHeaderData {
-  const _DayHeaderData({
-    required this.weekdayLabel,
-    required this.dateLabel,
-    required this.date,
-    this.today = false,
-  });
-
-  final String weekdayLabel;
-  final String dateLabel;
-  final DateTime date;
-  final bool today;
 }

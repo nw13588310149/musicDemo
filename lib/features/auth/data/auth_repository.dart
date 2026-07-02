@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_response.dart';
+import '../../../core/network/api_unauthorized_handler.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/storage/app_storage.dart';
 
@@ -92,6 +93,8 @@ class AuthRepository {
     await _storage.saveToken(token);
     await _storage.saveSchoolId(0);
     await client.updateToken(token);
+    // 新 token 写入后立即作废仍在飞行中的旧 401 清会话 / 跳登录逻辑。
+    ApiUnauthorizedHandler.instance.reset();
   }
 
   /// 登录 / 注册成功后保存当前账号手机号，供 ShellController 在

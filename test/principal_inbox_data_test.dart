@@ -25,4 +25,33 @@ void main() {
     expect(parsePrincipalInboxList(response), hasLength(1));
     expect(parsePrincipalInboxList(response).first.msgType, '建议');
   });
+
+  test('parses non-anonymous submitter from nested user object', () {
+    const response = {
+      'data': [
+        {
+          'id': '29',
+          'msgType': '举报',
+          'isAnonymous': 0,
+          'content': '测试',
+          'status': 0,
+          'createTime': '2026-07-02 23:25:29',
+          'user': {
+            'id': '2067581104570699778',
+            'headUrl':
+                'app/upload/2067581104570699778/2026-07-02/2072697923631542274.jpeg',
+            'nickname': '季栋',
+            'realname': null,
+          },
+        },
+      ],
+    };
+
+    final item = parsePrincipalInboxList(response).first;
+    expect(item.isAnonymous, isFalse);
+    expect(item.submitterName, '季栋');
+    expect(item.submitterLabel, '季栋');
+    expect(item.submitterHeadUrl, isNotEmpty);
+    expect(item.submitterHeadUrl, contains('2072697923631542274.jpeg'));
+  });
 }
