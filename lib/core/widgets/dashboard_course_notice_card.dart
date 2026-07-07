@@ -64,6 +64,9 @@ class DashboardCourseNoticeCard extends StatelessWidget {
     required this.runState,
     this.isSelected = false,
     this.tagDotColor,
+    this.statusBadgeLabel,
+    this.statusBadgeBackground,
+    this.statusBadgeTextColor,
     this.onTap,
   });
 
@@ -77,6 +80,11 @@ class DashboardCourseNoticeCard extends StatelessWidget {
   final DashboardCourseRunState runState;
   final bool isSelected;
   final Color? tagDotColor;
+
+  /// 自定义右上角状态角标（如签到历史「正常 / 缺勤」）；未设置时沿用课程阶段文案。
+  final String? statusBadgeLabel;
+  final Color? statusBadgeBackground;
+  final Color? statusBadgeTextColor;
   final VoidCallback? onTap;
 
   static const Color _kCardBg = Color(0xFFF5F6FA);
@@ -118,8 +126,12 @@ class DashboardCourseNoticeCard extends StatelessWidget {
     final scale = DashboardScaleScope.maybeOf(context);
     double ui(double value) => scale?.ui(value) ?? value;
 
-    final statusColor = _isEnded ? _kStatusEndedBg : _kStatusActiveBg;
-    final statusTextColor = _isEnded ? _kTextHint : _kTextDark;
+    final statusColor =
+        statusBadgeBackground ??
+        (_isEnded ? _kStatusEndedBg : _kStatusActiveBg);
+    final statusTextColor =
+        statusBadgeTextColor ?? (_isEnded ? _kTextHint : _kTextDark);
+    final badgeLabel = statusBadgeLabel ?? _statusLabel;
     final timeTextColor = _isUpcoming ? _kTextDark : _kTextSection;
     final muted = _isEnded;
     final resolvedDotColor = muted ? null : tagDotColor;
@@ -175,7 +187,7 @@ class DashboardCourseNoticeCard extends StatelessWidget {
                 ),
               ),
               child: Text(
-                _statusLabel,
+                badgeLabel,
                 style: TextStyle(
                   fontSize: ui(12),
                   color: statusTextColor,

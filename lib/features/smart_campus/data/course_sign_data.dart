@@ -19,8 +19,8 @@ enum CourseSignFlowStatus {
   teacherEnd(3, '老师下课签到'),
   studentEnd(4, '学生下课签到'),
   studentEval(5, '学生评价'),
-  adminConfirm(6, '管理员确认'),
-  adminReject(7, '管理员驳回');
+  adminConfirm(6, '教务老师确认'),
+  adminReject(7, '教务老师驳回');
 
   const CourseSignFlowStatus(this.code, this.label);
 

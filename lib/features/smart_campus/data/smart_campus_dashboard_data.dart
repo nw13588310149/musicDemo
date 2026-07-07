@@ -832,7 +832,12 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
           badgeLabel: '宿管老师',
           statusLabel: '巡查中',
           organization: '生活辅导员 · 宿管值班',
-          detailLines: ['区域：男生公寓 1-3 号楼', '区域：女生公寓 A 区', '职责：查寝 / 补卡 / 晚归闭环'],
+          detailLines: [
+            '区域：男生公寓 1-3 号楼',
+            '区域：女生公寓 A 区',
+            '权限：管辖区域宿舍管理',
+            '职责：查寝 / 补卡 / 晚归闭环',
+          ],
         ),
         notices: const [
           SmartCampusNoticeData(
@@ -1078,7 +1083,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
           SmartCampusAlertData(
             tag: '预警',
             title: '宿管请假审批超 12 小时未处理',
-            subtitle: '请管理员补充责任人并通知宿管端继续值班。',
+            subtitle: '请教务老师补充责任人并通知宿管端继续值班。',
           ),
           SmartCampusAlertData(
             tag: '预警',

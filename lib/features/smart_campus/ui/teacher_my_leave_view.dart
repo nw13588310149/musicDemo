@@ -277,7 +277,7 @@ class _TeacherMyLeaveViewState extends ConsumerState<TeacherMyLeaveView> {
           Padding(
             padding: EdgeInsets.only(left: ui(8)),
             child: Text(
-              '提交后由教务管理员审批；审批结果将同步至本页。',
+              '提交后由教务老师审批；审批结果将同步至本页。',
               style: TextStyle(
                 fontSize: ui(12),
                 color: _kTextHint,

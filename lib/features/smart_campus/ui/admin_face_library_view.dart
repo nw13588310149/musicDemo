@@ -485,7 +485,7 @@ class _LibraryRecord {
               'auditUserName',
               'auditUserId',
               'auditUser',
-            ], '管理员')
+            ], '教务老师')
           : null,
       headUrl: headUrl,
       faceImgUrl: faceImg,

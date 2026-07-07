@@ -1254,7 +1254,7 @@ class _AdminSidePanel extends StatelessWidget {
           displayName: displayName,
           avatarUrl: avatarUrl,
           institutionName: institutionName,
-          roleBadge: selectedRole == SmartCampusRole.principal ? '校长' : '管理员',
+          roleBadge: selectedRole.label,
           role: selectedRole,
         ),
         SizedBox(height: ui(20)),
@@ -1418,7 +1418,7 @@ class _ProfileHeader extends StatelessWidget {
     required this.displayName,
     required this.avatarUrl,
     this.institutionName = '',
-    this.roleBadge = '管理员',
+    this.roleBadge = '教务老师',
     this.role = SmartCampusRole.admin,
   });
 
@@ -1478,7 +1478,7 @@ class _ProfileHeader extends StatelessWidget {
                     children: [
                       Flexible(
                         child: Text(
-                          displayName.isEmpty ? '管理员' : displayName,
+                          displayName.isEmpty ? '教务老师' : displayName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -1564,7 +1564,7 @@ class _ProfileInfoRows extends StatelessWidget {
     return const Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _InfoLine(label: '岗位：', value: '教务管理员'),
+        _InfoLine(label: '岗位：', value: '教务老师'),
         SizedBox(height: 4),
         _InfoLine(label: '部门：', value: '教务处'),
         SizedBox(height: 4),

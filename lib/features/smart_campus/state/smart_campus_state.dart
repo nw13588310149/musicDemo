@@ -72,7 +72,7 @@ extension SmartCampusRoleX on SmartCampusRole {
       case SmartCampusRole.dormManager:
         return '宿管';
       case SmartCampusRole.admin:
-        return '管理员';
+        return '教务老师';
       case SmartCampusRole.principal:
         return '校长';
     }
@@ -89,7 +89,7 @@ extension SmartCampusRoleX on SmartCampusRole {
       case SmartCampusRole.dormManager:
         return '宿管';
       case SmartCampusRole.admin:
-        return '管理';
+        return '教务';
       case SmartCampusRole.principal:
         return '校长';
     }
@@ -107,7 +107,7 @@ extension SmartCampusRoleX on SmartCampusRole {
 /// 已知后端取值示例：
 /// - role: `student` / `teacher` / `headTeacher` / `head_teacher` /
 ///   `class_teacher` / `dorm` / `dormManager` / `admin` / `principal` 等
-/// - identity: 「学生 / 老师 / 班主任 / 宿管 / 管理员 / 校长」等
+/// - identity: 「学生 / 老师 / 班主任 / 宿管 / 教务老师 / 校长」等
 SmartCampusRole mapBackendRoleToCampus(String role, [String identity = '']) {
   final r = role.trim().toLowerCase();
   // 1. 通过 role 标识符精确匹配（去掉下划线/连字符方便对齐）
@@ -143,14 +143,16 @@ SmartCampusRole mapBackendRoleToCampus(String role, [String identity = '']) {
       return SmartCampusRole.principal;
   }
 
-  // 2. 中文 identity 兜底（注意：班主任要先于「老师」，校长/管理员要分开识别）
+  // 2. 中文 identity 兜底（注意：班主任要先于「老师」，校长/教务要分开识别）
   if (identity.contains('班主任')) {
     return SmartCampusRole.headTeacher;
   }
   if (identity.contains('校长')) {
     return SmartCampusRole.principal;
   }
-  if (identity.contains('管理')) {
+  if (identity.contains('教务老师') ||
+      identity.contains('管理员') ||
+      identity.contains('管理')) {
     return SmartCampusRole.admin;
   }
   if (identity.contains('宿管') || identity.contains('宿舍')) {

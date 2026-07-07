@@ -338,8 +338,8 @@ class _NotesListView extends ConsumerWidget {
           ],
         ),
         if (state.busy)
-          Positioned.fill(
-            child: const AppLoadingOverlay(scrimColor: Color(0x22000000)),
+          const Positioned.fill(
+            child: AppLoadingOverlay(),
           ),
       ],
     );

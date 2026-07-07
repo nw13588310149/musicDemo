@@ -88,10 +88,7 @@ class MyCollectionPage extends ConsumerWidget {
         ),
         if (state.busy && state.shareTarget == null)
           const Positioned.fill(
-            child: ColoredBox(
-              color: Color(0x22000000),
-              child: Center(child: AppLoadingIndicator()),
-            ),
+            child: AppLoadingOverlay(),
           ),
       ],
     );

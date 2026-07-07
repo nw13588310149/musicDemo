@@ -15,6 +15,7 @@ import '../../../core/widgets/image_gallery_viewer.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../theory/ui/widgets/theory_pdf_view.dart';
 import '../data/ai_chat_attachment_picker.dart';
+import '../../shell/state/shell_controller.dart';
 import '../state/ai_chat_controller.dart';
 import '../state/ai_chat_state.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -101,6 +102,18 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
       _moreTriggerKeys.putIfAbsent(sessionId, GlobalKey.new);
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final userId = ref.read(shellControllerProvider).user.id;
+      ref.read(aiChatControllerProvider.notifier).syncSessionsWithCurrentUser(
+        userId,
+      );
+    });
+  }
+
+  @override
   void dispose() {
     _bottomScrollTimer?.cancel();
     _inputCtrl.dispose();
@@ -110,6 +123,14 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<String>(
+      shellControllerProvider.select((state) => state.user.id),
+      (_, next) {
+        ref.read(aiChatControllerProvider.notifier).syncSessionsWithCurrentUser(
+          next,
+        );
+      },
+    );
     final state = ref.watch(aiChatControllerProvider);
     final controller = ref.read(aiChatControllerProvider.notifier);
     _scheduleScrollIfNeeded(state);

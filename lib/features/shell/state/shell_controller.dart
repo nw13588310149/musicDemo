@@ -9,6 +9,7 @@ import '../../../core/providers/app_providers.dart';
 import '../../../core/storage/app_storage.dart';
 import '../data/shell_repository.dart';
 import '../../smart_campus/state/smart_campus_controller.dart';
+import '../../ai_chat/state/ai_chat_controller.dart';
 import 'school_binding_controller.dart';
 import 'shell_state.dart';
 
@@ -92,6 +93,9 @@ class ShellController extends StateNotifier<ShellState> {
     // 智慧校园身份/子页状态常驻内存，登出时必须销毁，避免下一账号
     // 继承上一账号的 availableRoles / selectedRole / mainView。
     _ref.invalidate(smartCampusControllerProvider);
+    // AI 助手历史会话同样常驻内存，登出时必须销毁，避免切换账号后
+    // 左侧仍展示上一账号的缓存列表。
+    _ref.invalidate(aiChatControllerProvider);
     pausePolling();
   }
 

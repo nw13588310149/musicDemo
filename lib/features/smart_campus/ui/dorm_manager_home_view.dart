@@ -40,7 +40,8 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 ///
 /// 右栏（256 宽）固定单张白卡：
 /// - 顶部 72 圆形头像 + 「Grey黎」16/500 + 绿点「在岗」+ 蓝底「宿管老师」徽章；
-/// - 「区域：男生公寓1-3号楼 / 女生公寓A区」+「职责：生活辅导员·宿管值班」；
+/// - 「区域：男生公寓1-3号楼 / 女生公寓A区」+「权限：管辖区域宿舍管理」+
+///   「职责：生活辅导员·宿管值班」；
 /// - 「通知」title + 滚动通知列表（后勤 / 联动 / 制度 / 大师课 等）。
 ///
 /// 不带 `onBack` —— 这就是 dormManager 角色下 `mainView == dashboard` 的根
@@ -1133,6 +1134,7 @@ class _ProfileDetailRows extends StatelessWidget {
 
   final List<String> areas;
 
+  static const _permission = '管辖区域宿舍管理';
   static const _duty = '生活辅导员·宿管值班';
 
   @override
@@ -1146,7 +1148,9 @@ class _ProfileDetailRows extends StatelessWidget {
           _AreaLine(label: '区域：', value: rows[i]),
         ],
         const SizedBox(height: 4),
-        _AreaLine(label: '职责：', value: _duty),
+        const _AreaLine(label: '权限：', value: _permission),
+        const SizedBox(height: 4),
+        const _AreaLine(label: '职责：', value: _duty),
       ],
     );
   }

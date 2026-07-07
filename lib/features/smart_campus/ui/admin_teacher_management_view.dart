@@ -302,7 +302,7 @@ String _teacherRoleLabel(String token) {
     case 'teacher':
       return '任课老师';
     case 'manager':
-      return '教务管理员';
+      return '教务老师';
     case 'dormitory':
     case 'dorm':
       return '宿管';

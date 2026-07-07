@@ -43,7 +43,9 @@ SmartCampusRole smartCampusRoleFromLabel(String label) {
   if (label.contains('校长')) {
     return SmartCampusRole.principal;
   }
-  if (label.contains('管理')) {
+  if (label.contains('教务老师') ||
+      label.contains('管理员') ||
+      label.contains('管理')) {
     return SmartCampusRole.admin;
   }
   if (label.contains('宿管')) {

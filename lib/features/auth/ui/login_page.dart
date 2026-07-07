@@ -10,6 +10,7 @@ import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../features/shell/state/school_binding_controller.dart';
 import '../../../features/shell/state/shell_controller.dart';
+import '../../ai_chat/state/ai_chat_controller.dart';
 import '../state/auth_controller.dart';
 import '../state/auth_state.dart';
 import 'widgets/auth_design_canvas.dart';
@@ -223,6 +224,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
     _showMessage(context, result.message);
     if (result.success) {
+      ref.invalidate(aiChatControllerProvider);
       // 登录成功后立即预热 ShellController（触发 myInfo/mySchool 并行请求），
       // 使菜单和头像在导航动画期间就已在飞，进入主框架时第一时间呈现。
       final shell = ref.read(shellControllerProvider.notifier);

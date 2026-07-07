@@ -201,7 +201,7 @@ class _AdminDormLeaveApprovalViewState
             Padding(
               padding: EdgeInsets.only(left: ui(8)),
               child: Text(
-                '教师提交申请后由教务管理员在本页审批；批准或拒绝后将同步至教师端。',
+                '教师提交申请后由教务老师在本页审批；批准或拒绝后将同步至教师端。',
                 style: TextStyle(
                   fontSize: ui(12),
                   color: _kTextHint,

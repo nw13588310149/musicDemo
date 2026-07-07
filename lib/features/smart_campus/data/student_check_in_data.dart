@@ -658,6 +658,8 @@ class StudentSignRecordItem {
     required this.durationLabel,
     required this.isAbsent,
     required this.courseType,
+    this.timeStart = '',
+    this.timeEnd = '',
     this.studentSignInTime,
     this.studentSignOutTime,
     this.method = '',
@@ -677,6 +679,10 @@ class StudentSignRecordItem {
   final String durationLabel;
   final bool isAbsent;
   final int courseType;
+
+  /// 课表起止时间（`timeBegin` / `timeEnd`，`HH:mm`）。
+  final String timeStart;
+  final String timeEnd;
   final String? studentSignInTime;
   final String? studentSignOutTime;
   final String method;
@@ -733,6 +739,8 @@ class StudentSignRecordItem {
       durationLabel: mins > 0 ? '$mins分钟' : '—',
       isAbsent: absentFlag,
       courseType: type,
+      timeStart: begin,
+      timeEnd: end,
       studentSignInTime: _pickNullable(flat, [
         'studentSignInTime',
         'signInTime',

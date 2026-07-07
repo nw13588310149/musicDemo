@@ -39,6 +39,7 @@ class AiChatController extends StateNotifier<AiChatState> {
   String? _streamTargetSessionId;
   String? _streamCorrelationReplyId;
   bool _streamUsesReasoningUi = false;
+  String? _sessionsOwnerUserId;
 
   static const String _chatRobot = 'deepseek';
 
@@ -55,6 +56,38 @@ class AiChatController extends StateNotifier<AiChatState> {
 
   Future<void> _loadInitial() async {
     await loadSessions(autoSelectFirst: false);
+  }
+
+  /// 账号切换后强制清空本地缓存并重新拉取会话列表。
+  Future<void> refreshSessionsForAccountChange() async {
+    _cancelAiStream(removeStreamingMessage: true);
+    state = state.copyWith(
+      clearActiveSessionId: true,
+      sessions: const [],
+      messages: const [],
+      pendingAttachments: const [],
+      isNewConversation: true,
+      waitingAssistant: false,
+      sending: false,
+      messagesLoading: false,
+      sessionsLoading: true,
+    );
+    await loadSessions(autoSelectFirst: false);
+  }
+
+  /// 当前登录用户与会话缓存归属不一致时触发强制刷新。
+  void syncSessionsWithCurrentUser(String userId) {
+    if (userId.isEmpty) {
+      return;
+    }
+    if (_sessionsOwnerUserId == userId) {
+      return;
+    }
+    final previousOwner = _sessionsOwnerUserId;
+    _sessionsOwnerUserId = userId;
+    if (previousOwner != null && previousOwner != userId) {
+      unawaited(refreshSessionsForAccountChange());
+    }
   }
 
   void toggleSidebar() {

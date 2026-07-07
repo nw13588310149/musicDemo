@@ -221,7 +221,7 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _StatsRow(stats: _statsFromSummary(checkIn.stats)),
-              SizedBox(height: ui(24)),
+              SizedBox(height: ui(12)),
               // 双列：今日课程 + 签到操作
               LayoutBuilder(
                 builder: (context, c) {
@@ -240,7 +240,7 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView>
                               .read(studentCheckInControllerProvider.notifier)
                               .selectCourse(course.courseId),
                         ),
-                        SizedBox(height: ui(20)),
+                        SizedBox(height: ui(16)),
                         _SectionTitle('签到操作'),
                         SizedBox(height: ui(12)),
                         _CheckInActionPanel(
@@ -310,7 +310,7 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView>
                   );
                 },
               ),
-              SizedBox(height: ui(28)),
+              SizedBox(height: ui(16)),
               Row(
                 children: [
                   const _SectionTitle('最近课堂记录'),
@@ -1276,8 +1276,11 @@ class _RecentRecordData {
     required this.date,
     required this.status,
     required this.studentName,
+    required this.teacherName,
     required this.duration,
     required this.location,
+    required this.timeStart,
+    required this.timeEnd,
     required this.startCard,
     required this.endCard,
     required this.method,
@@ -1292,8 +1295,11 @@ class _RecentRecordData {
   final String date;
   final _AttendanceStatus status;
   final String studentName;
+  final String teacherName;
   final String duration;
   final String location;
+  final String timeStart;
+  final String timeEnd;
 
   /// 上课卡时间。null = "-"，"/" 这种特殊值原样展示
   final String? startCard;
@@ -1517,6 +1523,48 @@ class _RecentRecordCard extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+class _HistoryDrawerRecordCard extends StatelessWidget {
+  const _HistoryDrawerRecordCard({required this.data, this.onApplyMakeup});
+
+  final _RecentRecordData data;
+  final VoidCallback? onApplyMakeup;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final isAbsent = data.status == _AttendanceStatus.absent;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DashboardCourseNoticeCard(
+          startTime: data.timeStart.isNotEmpty ? data.timeStart : '--:--',
+          endTime: data.timeEnd.isNotEmpty ? data.timeEnd : '--:--',
+          subjectName: data.studentName,
+          isSmallCourse: data.isSmallCourse,
+          displayName: data.teacherName,
+          subtitle: '${data.duration}·${data.location}',
+          avatar: _Avatar(
+            seed: data.teacherName,
+            size: ui(40),
+            imageUrl: data.avatarUrl,
+          ),
+          runState: DashboardCourseRunState.ended,
+          statusBadgeLabel: isAbsent ? '缺勤' : '正常',
+          statusBadgeBackground: isAbsent ? _kAttendRed : _kPurpleSoftBg,
+          statusBadgeTextColor: isAbsent ? Colors.white : _kTextDark,
+        ),
+        if (isAbsent && onApplyMakeup != null) ...[
+          SizedBox(height: ui(8)),
+          Align(
+            alignment: Alignment.centerRight,
+            child: _MakeupApplyButton(onTap: onApplyMakeup),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -1837,7 +1885,7 @@ class _RecentCourseKindFilterTabs extends StatelessWidget {
 //       · 大小课 pill 组：全部 / 大课 / 小课（前端过滤，不调接口）
 //       · 状态 tabs：全部 / 正常 / 缺勤（选中态 = 白底加粗 + 紫色文字）
 //   - 汇总条：「共 N 条 · 正常 m · 缺勤 k」，缺勤用红色突出
-//   - 列表区：垂直列出 _RecentRecordCard，每张卡之间 12 间距
+//   - 列表区：垂直列出 [_HistoryDrawerRecordCard]（复用首页课程卡 104 高样式），间距 12
 //   - 空态：居中"暂无签到记录"灰字
 // =============================================================================
 
@@ -2063,7 +2111,7 @@ class _CheckInHistoryDrawerState extends ConsumerState<_CheckInHistoryDrawer> {
                                   final entry = filteredEntries[i];
                                   final card = entry.card;
                                   final item = entry.item;
-                                  return _RecentRecordCard(
+                                  return _HistoryDrawerRecordCard(
                                     data: card,
                                     onApplyMakeup:
                                         _kStudentMakeupSignEnabled &&
@@ -3239,8 +3287,11 @@ _RecentRecordData _recentRecordFromItem(
     date: item.date,
     status: item.isAbsent ? _AttendanceStatus.absent : _AttendanceStatus.normal,
     studentName: item.subjectName,
+    teacherName: item.teacherName,
     duration: item.durationLabel,
     location: item.location,
+    timeStart: item.timeStart,
+    timeEnd: item.timeEnd,
     startCard: item.isAbsent
         ? null
         : (start == null || start.isEmpty ? '-' : start),

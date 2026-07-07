@@ -1499,7 +1499,7 @@ class _SmallClassStatsRow extends StatelessWidget {
         Expanded(
           child: SmartCampusStatCard(
             valueLabel: '$pendingAdmin',
-            label: '待管理员确认',
+            label: '待教务老师确认',
             backgroundAsset: AppAssets.adminSignManagementStatCard3,
           ),
         ),
@@ -1520,7 +1520,7 @@ class _SmallClassFlowHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    const steps = ['教师上课签', '学生上课签', '教师下课签', '学生下课签', '学生评价', '管理员确认'];
+    const steps = ['教师上课签', '学生上课签', '教师下课签', '学生下课签', '学生评价', '教务老师确认'];
     return Container(
       padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(10)),
       decoration: BoxDecoration(
@@ -2169,7 +2169,7 @@ class _SmallClassStepper extends StatelessWidget {
       (label: '教师下课签', step: _SmallClassStep.teacherCheckedOut),
       (label: '学生下课签', step: _SmallClassStep.studentCheckedOut),
       (label: '学生评价', step: _SmallClassStep.studentEvaluated),
-      (label: '管理员确认', step: _SmallClassStep.adminConfirmed),
+      (label: '教务老师确认', step: _SmallClassStep.adminConfirmed),
     ];
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,

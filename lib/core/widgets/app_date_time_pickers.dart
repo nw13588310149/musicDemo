@@ -1,10 +1,84 @@
 import 'package:flutter/material.dart';
 
 import '../constants/app_assets.dart';
+import '../theme/app_font.dart';
 
 /// 与资料页「生日」日期选择器（`info_page` → `_editBirthday`）一致的主题色。
 const Color appPickerPrimary = Color(0xFF8741FF);
 const Color appPickerOnSurface = Color(0xFF0B081A);
+
+const Color _appPickerCancelBorder = Color(0xFFF3F2F3);
+const Color _appPickerCancelShadow = Color(0x59B5B5B5);
+const Color _appPickerConfirmShadow = Color(0x59AD80FF);
+
+TextStyle _appPickerActionButtonTextStyle() {
+  return const TextStyle(
+    fontSize: 16,
+    fontFamily: 'PingFang SC',
+    height: 12 / 16,
+  ).copyWith(fontWeight: AppFont.w400);
+}
+
+/// 与 [AppDialogActionBar] 取消按钮一致：白底、浅描边、深色字。
+ButtonStyle _appPickerCancelButtonStyle() {
+  return TextButton.styleFrom(
+    foregroundColor: appPickerOnSurface,
+    textStyle: _appPickerActionButtonTextStyle(),
+    padding: const EdgeInsets.symmetric(horizontal: 20),
+    minimumSize: const Size(64, 45),
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    backgroundBuilder: (context, states, child) {
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _appPickerCancelBorder),
+          boxShadow: const [
+            BoxShadow(
+              color: _appPickerCancelShadow,
+              blurRadius: 20,
+              offset: Offset(0, 16),
+            ),
+          ],
+        ),
+        child: child,
+      );
+    },
+  );
+}
+
+/// 与 [AppDialogActionBar] 确认按钮一致：紫色渐变底、白字。
+ButtonStyle _appPickerConfirmButtonStyle() {
+  return TextButton.styleFrom(
+    foregroundColor: Colors.white,
+    textStyle: _appPickerActionButtonTextStyle(),
+    padding: const EdgeInsets.symmetric(horizontal: 20),
+    minimumSize: const Size(64, 45),
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    backgroundBuilder: (context, states, child) {
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.centerRight,
+            end: Alignment.centerLeft,
+            colors: <Color>[Color(0xFFB68EFF), Color(0xFF8640FF)],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: const [
+            BoxShadow(
+              color: _appPickerConfirmShadow,
+              blurRadius: 20,
+              offset: Offset(0, 16),
+            ),
+          ],
+        ),
+        child: child,
+      );
+    },
+  );
+}
 
 /// 日期/时间选择器入口模式切换按钮用的 PNG 图标。
 ///
@@ -45,6 +119,15 @@ DatePickerThemeData _appDatePickerThemeFor(BuildContext context) {
 
   return DatePickerThemeData(
     headerHeadlineStyle: baseHeadline?.copyWith(fontSize: headlineFontSize),
+    cancelButtonStyle: _appPickerCancelButtonStyle(),
+    confirmButtonStyle: _appPickerConfirmButtonStyle(),
+  );
+}
+
+TimePickerThemeData _appTimePickerThemeFor(BuildContext context) {
+  return TimePickerThemeData(
+    cancelButtonStyle: _appPickerCancelButtonStyle(),
+    confirmButtonStyle: _appPickerConfirmButtonStyle(),
   );
 }
 
@@ -60,6 +143,7 @@ ThemeData appPickerThemeFor(BuildContext context) {
       style: TextButton.styleFrom(foregroundColor: appPickerPrimary),
     ),
     datePickerTheme: _appDatePickerThemeFor(context),
+    timePickerTheme: _appTimePickerThemeFor(context),
   );
 }
 

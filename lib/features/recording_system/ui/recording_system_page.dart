@@ -231,13 +231,7 @@ class _RecordingListViewState extends ConsumerState<_RecordingListView> {
                 if (state.busy)
                   Positioned.fill(
                     child: IgnorePointer(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.48),
-                          borderRadius: BorderRadius.circular(ui(16)),
-                        ),
-                        child: Center(child: const AppLoadingIndicator()),
-                      ),
+                      child: const AppLoadingOverlay(),
                     ),
                   ),
               ],

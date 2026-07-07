@@ -77,14 +77,14 @@ class AppLoadingIndicator extends StatelessWidget {
   }
 }
 
-/// 页面初次进入 loading：相对 [child] 主容器全区域居中蒙层（保留 header/tab 等），
+/// 页面初次进入 loading：相对 [child] 主容器全区域居中指示器（保留 header/tab 等），
 /// 不依据下方列表/网格渲染区定位。
 class PageInitLoadingShell extends StatelessWidget {
   const PageInitLoadingShell({
     super.key,
     required this.loading,
     required this.child,
-    this.scrimColor = const Color(0x59FFFFFF),
+    this.scrimColor = Colors.transparent,
   });
 
   final bool loading;
@@ -107,7 +107,7 @@ class PageInitLoadingShell extends StatelessWidget {
 /// 主内容区统一 loading：整区只显示一个指示器，避免多个列表/分区各自转圈。
 ///
 /// [preserveChrome] 为 true 时 loading 期间仍渲染 [child]（保留 banner/tab 等），
-/// 并在其上覆盖半透明蒙层 + 居中 loading。初次进入请优先 [PageInitLoadingShell]。
+/// 并在其上覆盖居中 loading（默认无遮罩）。初次进入请优先 [PageInitLoadingShell]。
 class MainContentLoadingShell extends StatelessWidget {
   const MainContentLoadingShell({
     super.key,
@@ -115,7 +115,7 @@ class MainContentLoadingShell extends StatelessWidget {
     required this.child,
     this.preserveChrome = false,
     this.minHeight,
-    this.scrimColor = const Color(0x59FFFFFF),
+    this.scrimColor = Colors.transparent,
   });
 
   final bool loading;
@@ -149,12 +149,12 @@ class MainContentLoadingShell extends StatelessWidget {
   }
 }
 
-/// 首页同款全屏 loading 蒙层（35% 白 + 居中 GIF）。
+/// 全屏 loading 层：默认仅居中 GIF，不铺白色遮罩。
 class AppLoadingOverlay extends StatelessWidget {
   const AppLoadingOverlay({
     super.key,
     this.size,
-    this.scrimColor = const Color(0x59FFFFFF),
+    this.scrimColor = Colors.transparent,
     this.ignorePointer = true,
   });
 

@@ -7,6 +7,7 @@ import '../storage/app_storage.dart';
 import '../../features/shell/state/school_binding_controller.dart';
 import '../../features/shell/state/shell_controller.dart';
 import '../../features/smart_campus/state/smart_campus_controller.dart';
+import '../../features/ai_chat/state/ai_chat_controller.dart';
 
 final appStorageProvider = Provider<AppStorage>((ref) {
   throw UnimplementedError('AppStorage provider must be overridden in main().');
@@ -29,6 +30,9 @@ void bindApiUnauthorizedSessionCleanup(WidgetRef ref) {
     }
     if (ref.exists(smartCampusControllerProvider)) {
       ref.invalidate(smartCampusControllerProvider);
+    }
+    if (ref.exists(aiChatControllerProvider)) {
+      ref.invalidate(aiChatControllerProvider);
     }
   });
 }
