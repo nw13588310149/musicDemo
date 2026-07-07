@@ -39,6 +39,19 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     unawaited(_initialize());
   }
 
+  /// 当前前台 MusicPlay 实例。叠层打开新播放页时，旧页仍在 Navigator
+  /// 栈里且 provider 未 dispose，需要通过 handoff 立刻停掉旧长音频。
+  static MusicPlayController? _foregroundController;
+
+  /// 路由切到新的 MusicPlay 之前调用，避免旧页与新页叠音。
+  static Future<void> stopForegroundPlayback() async {
+    final current = _foregroundController;
+    if (current == null) {
+      return;
+    }
+    await current._stopLongAudioForHandoff();
+  }
+
   final MusicPlayRepository repository;
   final MusicCompanionAudioEngine _pianoEngine;
 
@@ -173,7 +186,47 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     return n >= currentIdx ? n + 1 : n;
   }
 
+  void _claimForegroundHandoff() {
+    final previous = _foregroundController;
+    if (previous != null && !identical(previous, this)) {
+      unawaited(previous._stopLongAudioForHandoff());
+    }
+    _foregroundController = this;
+  }
+
+  void _releaseForegroundHandoff() {
+    if (identical(_foregroundController, this)) {
+      _foregroundController = null;
+    }
+  }
+
+  /// 立刻停止长音频与钢琴，供页间切换 / 同页换教材 handoff 使用。
+  Future<void> _stopLongAudioForHandoff() async {
+    if (_disposed) {
+      return;
+    }
+    _openTicket++;
+    _endScrubUiHold(immediate: true);
+    if (mounted) {
+      state = state.copyWith(isPlaying: false);
+    }
+    _setVisualizerPausedState();
+    _pianoEngine.stopAllImmediately();
+    final player = _player;
+    if (player == null) {
+      return;
+    }
+    try {
+      if (player.usesPitchTransport) {
+        await player.ensureOutputMuted();
+      }
+      await player.pause();
+      await player.stop();
+    } catch (_) {}
+  }
+
   Future<void> _initialize() async {
+    _claimForegroundHandoff();
     // 钢琴/会话预热与详情加载并行：预热先发起以尽量先占好会话，但**绝不阻塞**
     // 详情加载与 loading spinner——否则一旦 iOS 音频会话卡住，整页会一直转圈。
     final warmUp = _warmUpPiano();
@@ -303,6 +356,8 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       state = state.copyWith(loading: false, errorMessage: '教材参数无效，无法打开播放页');
       return;
     }
+
+    await _stopLongAudioForHandoff();
 
     state = state.copyWith(
       loading: true,
@@ -1896,6 +1951,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   void dispose() {
     // 关键：_disposed + _openTicket 让 in-flight 的 open 在 await 后不再碰 mpv；
     // 异步链在后台先等 open 结束，再 pause→stop→dispose，避免 libmpv abort。
+    _releaseForegroundHandoff();
     _disposed = true;
     _openTicket++;
     _endScrubUiHold(immediate: true);

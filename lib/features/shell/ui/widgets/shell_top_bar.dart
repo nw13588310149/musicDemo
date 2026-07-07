@@ -12,6 +12,7 @@ import '../../../../core/constants/app_assets.dart';
 import '../../../../core/widgets/app_asset_graphic.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../../../core/widgets/app_wheel_picker_sheet.dart';
+import '../../../music_play/state/music_play_controller.dart';
 import '../../data/shell_repository.dart';
 import '../../state/shell_controller.dart';
 import '../../state/shell_state.dart';
@@ -1032,10 +1033,10 @@ class _TopSearchBoxState extends ConsumerState<_TopSearchBox> {
       switch (type) {
         case 1:
         case 3:
-          navigator.pushNamed(
-            RoutePaths.musicPlay,
-            arguments: <String, dynamic>{'id': item.id},
-          );
+          unawaited(_openMusicPlayPage(
+            navigator,
+            <String, dynamic>{'id': item.id},
+          ));
           return;
         case 2:
           navigator.pushNamed(
@@ -1045,10 +1046,10 @@ class _TopSearchBoxState extends ConsumerState<_TopSearchBox> {
           return;
         case 4:
         case 5:
-          navigator.pushNamed(
-            RoutePaths.musicPlay,
-            arguments: <String, dynamic>{'id': item.id, 'type': 2},
-          );
+          unawaited(_openMusicPlayPage(
+            navigator,
+            <String, dynamic>{'id': item.id, 'type': 2},
+          ));
           return;
         case 6:
           navigator.pushNamed(
@@ -1085,6 +1086,28 @@ class _TopSearchBoxState extends ConsumerState<_TopSearchBox> {
       );
       return;
     }
+  }
+
+  Future<void> _openMusicPlayPage(
+    NavigatorState navigator,
+    Map<String, dynamic> arguments,
+  ) async {
+    await MusicPlayController.stopForegroundPlayback();
+    if (!mounted) {
+      return;
+    }
+    final currentRoute = ModalRoute.of(context)?.settings.name;
+    final replaceCurrent =
+        currentRoute == RoutePaths.musicPlay ||
+        currentRoute == RoutePaths.answerEnd2;
+    if (replaceCurrent) {
+      navigator.pushReplacementNamed(
+        RoutePaths.musicPlay,
+        arguments: arguments,
+      );
+      return;
+    }
+    navigator.pushNamed(RoutePaths.musicPlay, arguments: arguments);
   }
 
   void _handleClear() {
