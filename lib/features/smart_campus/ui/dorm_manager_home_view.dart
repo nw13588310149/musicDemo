@@ -3,8 +3,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
-
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/state/shell_controller.dart';
@@ -148,86 +146,82 @@ class _DormManagerHomeViewState extends ConsumerState<DormManagerHomeView> {
     final index = managerState.index;
     final institutionName = ref.watch(shellControllerProvider).schoolName;
 
-    return PageInitLoadingShell(
-      loading: managerState.loadingHome,
-      scrimColor: Colors.transparent,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          var cw = constraints.maxWidth;
-          if (!cw.isFinite || cw == double.infinity || cw < 2) {
-            final w = MediaQuery.sizeOf(context).width;
-            cw = (w - ui(ShellLayoutSpec.sidebarWidth) - ui(16) * 2).clamp(
-              240.0,
-              20000.0,
-            );
-          }
-          final isCompact = cw < ui(900);
-          final sidebarWidth = ui(256);
-          final contentGap = ui(16);
-          final mainWidth = isCompact
-              ? cw
-              : math.max(0.0, cw - sidebarWidth - contentGap);
-
-          final mainColumn = _DormMainColumn(
-            index: index,
-            teacherLeavePendingCount: managerState.teacherLeavePendingCount,
-            fillRemaining: !isCompact,
-            onOpenGroupChat: widget.onOpenGroupChat,
-            onOpenPrincipalMailbox: widget.onOpenPrincipalMailbox,
-            onOpenSchoolCircle: widget.onOpenSchoolCircle,
-            onOpenDormCheckByRoom: widget.onOpenDormCheckByRoom,
-            onOpenDormCheckHistory: widget.onOpenDormCheckHistory,
-            onOpenCheckInManagement: widget.onOpenCheckInManagement,
-            onOpenDormManagerLeave: widget.onOpenDormManagerLeave,
-            onOpenDormDynamic: widget.onOpenDormDynamic,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        var cw = constraints.maxWidth;
+        if (!cw.isFinite || cw == double.infinity || cw < 2) {
+          final w = MediaQuery.sizeOf(context).width;
+          cw = (w - ui(ShellLayoutSpec.sidebarWidth) - ui(16) * 2).clamp(
+            240.0,
+            20000.0,
           );
+        }
+        final isCompact = cw < ui(900);
+        final sidebarWidth = ui(256);
+        final contentGap = ui(16);
+        final mainWidth = isCompact
+            ? cw
+            : math.max(0.0, cw - sidebarWidth - contentGap);
 
-          final sidePanel = _DormManagerSidePanel(
-            fillHeight: !isCompact,
-            displayName: widget.shellDisplayName,
-            avatarUrl: widget.avatarUrl,
-            institutionName: institutionName,
-            availableRoles: widget.availableRoles,
-            selectedRole: widget.selectedRole,
-            onSelectRole: widget.onSelectRole,
-            managedAreas: index.managedAreas,
+        final mainColumn = _DormMainColumn(
+          index: index,
+          teacherLeavePendingCount: managerState.teacherLeavePendingCount,
+          fillRemaining: !isCompact,
+          onOpenGroupChat: widget.onOpenGroupChat,
+          onOpenPrincipalMailbox: widget.onOpenPrincipalMailbox,
+          onOpenSchoolCircle: widget.onOpenSchoolCircle,
+          onOpenDormCheckByRoom: widget.onOpenDormCheckByRoom,
+          onOpenDormCheckHistory: widget.onOpenDormCheckHistory,
+          onOpenCheckInManagement: widget.onOpenCheckInManagement,
+          onOpenDormManagerLeave: widget.onOpenDormManagerLeave,
+          onOpenDormDynamic: widget.onOpenDormDynamic,
+        );
+
+        final sidePanel = _DormManagerSidePanel(
+          fillHeight: !isCompact,
+          displayName: widget.shellDisplayName,
+          avatarUrl: widget.avatarUrl,
+          institutionName: institutionName,
+          availableRoles: widget.availableRoles,
+          selectedRole: widget.selectedRole,
+          onSelectRole: widget.onSelectRole,
+          managedAreas: index.managedAreas,
+        );
+
+        if (isCompact) {
+          return SingleChildScrollView(
+            padding: EdgeInsets.only(bottom: ui(20)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                mainColumn,
+                SizedBox(height: contentGap),
+                sidePanel,
+              ],
+            ),
           );
+        }
 
-          if (isCompact) {
-            return SingleChildScrollView(
-              padding: EdgeInsets.only(bottom: ui(20)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  mainColumn,
-                  SizedBox(height: contentGap),
-                  sidePanel,
-                ],
-              ),
-            );
-          }
-
-          return Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Positioned(
-                left: 0,
-                top: 0,
-                bottom: 0,
-                width: mainWidth,
-                child: mainColumn,
-              ),
-              Positioned(
-                right: 0,
-                top: 0,
-                bottom: 0,
-                width: sidebarWidth,
-                child: sidePanel,
-              ),
-            ],
-          );
-        },
-      ),
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: mainWidth,
+              child: mainColumn,
+            ),
+            Positioned(
+              right: 0,
+              top: 0,
+              bottom: 0,
+              width: sidebarWidth,
+              child: sidePanel,
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -1235,9 +1229,6 @@ class _DormNoticePanelState extends ConsumerState<_DormNoticePanel> {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final state = ref.watch(dormitoryManagerControllerProvider);
-    if (state.loadingNotices) {
-      return const Center(child: AppLoadingIndicator());
-    }
     if (state.notices.isEmpty) {
       return Center(
         child: Text(

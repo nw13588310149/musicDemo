@@ -38,8 +38,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
-
 import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
@@ -188,14 +186,11 @@ class _DormManagerCheckByRoomViewState
     final rooms = state.roomChecks;
     return Container(
       color: _kPageBg,
-      child: PageInitLoadingShell(
-        loading: state.loadingRoomChecks && rooms.isEmpty,
-        scrimColor: Colors.transparent,
-        child: SingleChildScrollView(
-          padding: EdgeInsets.only(bottom: ui(20)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+      child: SingleChildScrollView(
+        padding: EdgeInsets.only(bottom: ui(20)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             _Banner(onBack: widget.onBack),
             SizedBox(height: ui(16)),
             _FilterRow(
@@ -230,9 +225,7 @@ class _DormManagerCheckByRoomViewState
               absent: stat.notCheckedCount,
             ),
             SizedBox(height: ui(16)),
-            if (state.loadingRoomChecks && rooms.isEmpty)
-              const SizedBox.shrink()
-            else if (state.roomCheckError.isNotEmpty)
+            if (state.roomCheckError.isNotEmpty)
               _LoadErrorHint(message: state.roomCheckError, onRetry: _reloadAll)
             else if (rooms.isEmpty)
               _EmptyRoomsHint()
@@ -251,7 +244,6 @@ class _DormManagerCheckByRoomViewState
                 ),
               ],
           ],
-        ),
         ),
       ),
     );

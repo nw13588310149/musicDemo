@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
-
 import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/dormitory_check_data.dart';
@@ -117,67 +115,57 @@ class _DormManagerMakeupAuditViewState
                 unawaited(_reload());
               },
             ),
-            MainContentLoadingShell(
-              loading: state.loadingMakeup && state.makeupItems.isEmpty,
-              preserveChrome: true,
-              scrimColor: Colors.transparent,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (state.error.isNotEmpty)
-                    Padding(
-                      padding: EdgeInsets.all(ui(12)),
-                      child: Text(state.error, style: TextStyle(color: _kRed)),
-                    )
-                  else if (state.makeupItems.isEmpty)
-                    Padding(
-                      padding: EdgeInsets.symmetric(vertical: ui(48)),
-                      child: Center(
-                        child: Text(
-                          _status == 0 ? '暂无待审补卡申请' : '暂无符合条件的补卡申请',
-                          style: TextStyle(fontSize: ui(14), color: _kTextHint),
-                        ),
-                      ),
-                    )
-                  else
-                    Padding(
-                      padding: EdgeInsets.only(top: ui(16)),
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          final gap = ui(16);
-                          var columns = 3;
-                          if (constraints.maxWidth < ui(720)) columns = 2;
-                          if (constraints.maxWidth < ui(480)) columns = 1;
-                          final cardWidth =
-                              (constraints.maxWidth - gap * (columns - 1)) /
-                              columns;
-                          return Wrap(
-                            spacing: gap,
-                            runSpacing: gap,
-                            children: [
-                              for (final item in state.makeupItems)
-                                SizedBox(
-                                  width: cardWidth,
-                                  child: _MakeupCard(
-                                    item: item,
-                                    submitting: state.submittingMakeupIds
-                                        .contains(item.id),
-                                    onDetail: () =>
-                                        unawaited(_showMakeupDetail(item)),
-                                    onApprove: () =>
-                                        unawaited(_audit(item, approve: true)),
-                                    onReject: () =>
-                                        unawaited(_audit(item, approve: false)),
-                                  ),
-                                ),
-                            ],
-                          );
-                        },
-                      ),
-                    ),
-                ],
+            if (state.error.isNotEmpty)
+              Padding(
+                padding: EdgeInsets.all(ui(12)),
+                child: Text(state.error, style: TextStyle(color: _kRed)),
+              )
+            else if (state.makeupItems.isEmpty)
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: ui(48)),
+                child: Center(
+                  child: Text(
+                    _status == 0 ? '暂无待审补卡申请' : '暂无符合条件的补卡申请',
+                    style: TextStyle(fontSize: ui(14), color: _kTextHint),
+                  ),
+                ),
+              )
+            else
+              Padding(
+                padding: EdgeInsets.only(top: ui(16)),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final gap = ui(16);
+                    var columns = 3;
+                    if (constraints.maxWidth < ui(720)) columns = 2;
+                    if (constraints.maxWidth < ui(480)) columns = 1;
+                    final cardWidth =
+                        (constraints.maxWidth - gap * (columns - 1)) /
+                        columns;
+                    return Wrap(
+                      spacing: gap,
+                      runSpacing: gap,
+                      children: [
+                        for (final item in state.makeupItems)
+                          SizedBox(
+                            width: cardWidth,
+                            child: _MakeupCard(
+                              item: item,
+                              submitting: state.submittingMakeupIds.contains(
+                                item.id,
+                              ),
+                              onDetail: () => unawaited(_showMakeupDetail(item)),
+                              onApprove: () =>
+                                  unawaited(_audit(item, approve: true)),
+                              onReject: () =>
+                                  unawaited(_audit(item, approve: false)),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
               ),
-            ),
           ],
         ),
       ),

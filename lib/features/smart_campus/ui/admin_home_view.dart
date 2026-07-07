@@ -1619,6 +1619,7 @@ class _SchoolNoticeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final tagStyle = teacherNoticeTagStyle(item.tag);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1643,7 +1644,7 @@ class _SchoolNoticeCard extends StatelessWidget {
                       vertical: ui(2),
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEAE5FF),
+                      color: tagStyle.background,
                       borderRadius: BorderRadius.circular(ui(4)),
                     ),
                     child: Text(
@@ -1652,7 +1653,7 @@ class _SchoolNoticeCard extends StatelessWidget {
                         fontSize: ui(10),
                         height: 1.2,
                         fontWeight: AppFont.w500,
-                        color: const Color(0xFF0B081A),
+                        color: tagStyle.foreground,
                         fontFamily: 'PingFang SC',
                       ),
                     ),

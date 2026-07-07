@@ -36,6 +36,7 @@ import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/state/shell_controller.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/student_repository.dart';
+import '../data/teacher_notice_data.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -478,6 +479,7 @@ _ParsedMySchoolClass _parseMySchoolClass(dynamic raw, String currentUserId) {
     headTeacher: _userDisplayName(headTeacher),
     counselor: _joinDormitoryTeacherNames(dormitoryTeachers, headTeacher),
     classroom: classroom,
+    announcement: announcement,
     footer: footer,
     totalCount: totalCount,
     boyCount: boyCount,
@@ -703,6 +705,7 @@ class _ClassInfoData {
     required this.headTeacher,
     required this.counselor,
     required this.classroom,
+    required this.announcement,
     required this.footer,
     required this.totalCount,
     required this.boyCount,
@@ -714,6 +717,9 @@ class _ClassInfoData {
   final String headTeacher;
   final String counselor;
   final String classroom;
+
+  /// 班级群公告正文；为空时底部展示 [footer] 占位文案。
+  final String announcement;
   final String footer;
   final int totalCount;
   final int boyCount;
@@ -794,20 +800,23 @@ class _ClassInfoCard extends StatelessWidget {
               ],
             ),
           ),
-          // footer
+          // 班级群公告 / 占位 footer
           Positioned(
             left: ui(16),
+            right: ui(16),
             top: ui(134),
-            child: Text(
-              data.footer,
-              style: TextStyle(
-                fontSize: ui(12),
-                color: _kTextHint,
-                fontWeight: AppFont.w400,
-                fontFamily: 'PingFang SC',
-                height: 1.2,
-              ),
-            ),
+            child: data.announcement.isNotEmpty
+                ? _ClassGroupAnnouncementRow(text: data.announcement)
+                : Text(
+                    data.footer,
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      color: _kTextHint,
+                      fontWeight: AppFont.w400,
+                      fontFamily: 'PingFang SC',
+                      height: 1.2,
+                    ),
+                  ),
           ),
           // 右上：三个数字盒
           Positioned(
@@ -825,6 +834,56 @@ class _ClassInfoCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 班级信息卡底部群公告：与首页右侧通知列表一致的「通知」色块 + 黑色正文。
+class _ClassGroupAnnouncementRow extends StatelessWidget {
+  const _ClassGroupAnnouncementRow({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final tagStyle = teacherNoticeTagStyle('通知');
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: ui(6), vertical: ui(2)),
+          decoration: BoxDecoration(
+            color: tagStyle.background,
+            borderRadius: BorderRadius.circular(ui(4)),
+          ),
+          child: Text(
+            '群公告',
+            style: TextStyle(
+              fontSize: ui(10),
+              height: 1.2,
+              fontWeight: AppFont.w500,
+              color: tagStyle.foreground,
+              fontFamily: 'PingFang SC',
+            ),
+          ),
+        ),
+        SizedBox(width: ui(6)),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: ui(12),
+              color: _kTextDark,
+              fontWeight: AppFont.w400,
+              fontFamily: 'PingFang SC',
+              height: 1.2,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

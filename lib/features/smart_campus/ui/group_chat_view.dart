@@ -77,6 +77,8 @@ import '../../courseware/ui/courseware_file_picker.dart';
 import '../navigation/group_chat_return.dart';
 import '../data/chat_repository.dart';
 import '../data/teacher_repository.dart';
+import '../services/group_chat_media_saver.dart';
+import 'widgets/group_chat_media_action_sheet.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 const Color _kPageBg = Color(0xFFEFF3FC);
@@ -948,6 +950,27 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
       setState(() => _recalling.remove(msgId));
       AppToast.show(context, res.displayMsg);
     }
+  }
+
+  Future<void> _onMessageLongPress(_UserChatMessage message) async {
+    final downloads = _downloadItemsForBubble(message.bubble);
+    final extras = <GroupChatMessageAction>[];
+    if (message.fromUserId == widget.currentUserId &&
+        !message.id.startsWith('local-')) {
+      extras.add(
+        GroupChatMessageAction(
+          label: '撤回',
+          destructive: true,
+          onSelected: () => _recallMessage(message),
+        ),
+      );
+    }
+    if (downloads.isEmpty && extras.isEmpty) return;
+    await showGroupChatMessageActionSheet(
+      context,
+      downloadItems: downloads,
+      extraActions: extras,
+    );
   }
 
   Future<void> _toggleMute() async {
@@ -1845,7 +1868,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
           announcementUpdatedAt: _announcementUpdatedAt,
           canEditAnnouncement: _canEditAnnouncement,
           onEditAnnouncement: _editAnnouncement,
-          onRecallMessage: _recallMessage,
+          onMessageLongPress: _onMessageLongPress,
           muted: _muted,
           pinned: _pinned,
           onToggleMute: _toggleMute,
@@ -1954,7 +1977,7 @@ class _ChatLayout extends StatelessWidget {
     required this.announcementUpdatedAt,
     required this.canEditAnnouncement,
     required this.onEditAnnouncement,
-    required this.onRecallMessage,
+    required this.onMessageLongPress,
     required this.muted,
     required this.pinned,
     required this.onToggleMute,
@@ -2009,7 +2032,7 @@ class _ChatLayout extends StatelessWidget {
   final String announcementUpdatedAt;
   final bool canEditAnnouncement;
   final VoidCallback onEditAnnouncement;
-  final ValueChanged<_UserChatMessage> onRecallMessage;
+  final ValueChanged<_UserChatMessage> onMessageLongPress;
   final bool muted;
   final bool pinned;
   final VoidCallback onToggleMute;
@@ -2060,7 +2083,7 @@ class _ChatLayout extends StatelessWidget {
                     announcementUpdatedAt: announcementUpdatedAt,
                     canEditAnnouncement: canEditAnnouncement,
                     onEditAnnouncement: onEditAnnouncement,
-                    onRecallMessage: onRecallMessage,
+                    onMessageLongPress: onMessageLongPress,
                     messages: messages,
                     loadingMessages: loadingMessages,
                     loadingOlder: loadingOlder,
@@ -2120,7 +2143,7 @@ class _ChatLayout extends StatelessWidget {
                   announcementUpdatedAt: announcementUpdatedAt,
                   canEditAnnouncement: canEditAnnouncement,
                   onEditAnnouncement: onEditAnnouncement,
-                  onRecallMessage: onRecallMessage,
+                  onMessageLongPress: onMessageLongPress,
                   messages: messages,
                   loadingMessages: loadingMessages,
                   loadingOlder: loadingOlder,
@@ -3521,7 +3544,7 @@ class _ChatRightPane extends StatefulWidget {
     required this.announcementUpdatedAt,
     required this.canEditAnnouncement,
     required this.onEditAnnouncement,
-    required this.onRecallMessage,
+    required this.onMessageLongPress,
     required this.messages,
     required this.loadingMessages,
     required this.loadingOlder,
@@ -3562,7 +3585,7 @@ class _ChatRightPane extends StatefulWidget {
   final String announcementUpdatedAt;
   final bool canEditAnnouncement;
   final VoidCallback onEditAnnouncement;
-  final ValueChanged<_UserChatMessage> onRecallMessage;
+  final ValueChanged<_UserChatMessage> onMessageLongPress;
   final List<_ChatMessage> messages;
   final bool loadingMessages;
 
@@ -3665,7 +3688,7 @@ class _ChatRightPaneState extends State<_ChatRightPane> {
         announcementUpdatedAt: widget.announcementUpdatedAt,
         canEditAnnouncement: widget.canEditAnnouncement,
         onEditAnnouncement: widget.onEditAnnouncement,
-        onRecallMessage: widget.onRecallMessage,
+        onMessageLongPress: widget.onMessageLongPress,
         currentUserId: widget.currentUserId,
         playingVoiceId: widget.playingVoiceId,
         playingFraction: widget.playingFraction,
@@ -3969,7 +3992,7 @@ class _ChatBodyBoard extends StatelessWidget {
     required this.announcementUpdatedAt,
     required this.canEditAnnouncement,
     required this.onEditAnnouncement,
-    required this.onRecallMessage,
+    required this.onMessageLongPress,
     required this.currentUserId,
     required this.playingVoiceId,
     required this.playingFraction,
@@ -3994,7 +4017,7 @@ class _ChatBodyBoard extends StatelessWidget {
   final String announcementUpdatedAt;
   final bool canEditAnnouncement;
   final VoidCallback onEditAnnouncement;
-  final ValueChanged<_UserChatMessage> onRecallMessage;
+  final ValueChanged<_UserChatMessage> onMessageLongPress;
   final String currentUserId;
   final String? playingVoiceId;
   final double playingFraction;
@@ -4093,7 +4116,7 @@ class _ChatBodyBoard extends StatelessWidget {
                               playingVoiceId: playingVoiceId,
                               playingFraction: playingFraction,
                               onToggleVoice: onToggleVoice,
-                              onRecallMessage: onRecallMessage,
+                              onMessageLongPress: onMessageLongPress,
                               groupChatClassId: groupChatClassId,
                             ),
                             SizedBox(height: ui(28)),
@@ -4300,7 +4323,7 @@ class _MessageRowDispatcher extends StatelessWidget {
     required this.playingVoiceId,
     required this.playingFraction,
     required this.onToggleVoice,
-    required this.onRecallMessage,
+    required this.onMessageLongPress,
     required this.groupChatClassId,
   });
 
@@ -4309,7 +4332,7 @@ class _MessageRowDispatcher extends StatelessWidget {
   final String? playingVoiceId;
   final double playingFraction;
   final ValueChanged<String> onToggleVoice;
-  final ValueChanged<_UserChatMessage> onRecallMessage;
+  final ValueChanged<_UserChatMessage> onMessageLongPress;
   final String groupChatClassId;
 
   @override
@@ -4328,7 +4351,7 @@ class _MessageRowDispatcher extends StatelessWidget {
         playingVoiceId: playingVoiceId,
         playingFraction: playingFraction,
         onToggleVoice: onToggleVoice,
-        onRecallMessage: onRecallMessage,
+        onMessageLongPress: onMessageLongPress,
         groupChatClassId: groupChatClassId,
       );
     }
@@ -4404,7 +4427,7 @@ class _UserMessageRow extends StatelessWidget {
     required this.playingVoiceId,
     required this.playingFraction,
     required this.onToggleVoice,
-    required this.onRecallMessage,
+    required this.onMessageLongPress,
     required this.groupChatClassId,
   });
 
@@ -4413,7 +4436,7 @@ class _UserMessageRow extends StatelessWidget {
   final String? playingVoiceId;
   final double playingFraction;
   final ValueChanged<String> onToggleVoice;
-  final ValueChanged<_UserChatMessage> onRecallMessage;
+  final ValueChanged<_UserChatMessage> onMessageLongPress;
   final String groupChatClassId;
 
   @override
@@ -4433,10 +4456,15 @@ class _UserMessageRow extends StatelessWidget {
       onToggleVoice: onToggleVoice,
       groupChatClassId: groupChatClassId,
     );
-    if (isMine) {
+    final downloads = _downloadItemsForBubble(message.bubble);
+    final canRecall =
+        isMine &&
+        !message.id.startsWith('local-') &&
+        message.fromUserId.isNotEmpty;
+    if (downloads.isNotEmpty || canRecall) {
       bubble = GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onLongPress: () => onRecallMessage(message),
+        onLongPress: () => onMessageLongPress(message),
         child: bubble,
       );
     }
@@ -4984,6 +5012,144 @@ String _resolveMediaUrl(String? raw) {
   if (trimmed.isEmpty) return '';
   if (trimmed.startsWith('blob:')) return trimmed;
   return MediaUrl.resolve(trimmed);
+}
+
+List<GroupChatMediaDownloadItem> _downloadItemsForBubble(_ChatBubble bubble) {
+  if (bubble is _ImageBubble) {
+    return _downloadItemsForImageBubble(bubble);
+  }
+  if (bubble is _VoiceBubble) {
+    return _downloadItemsForVoiceBubble(bubble);
+  }
+  if (bubble is _FileBubble) {
+    return _downloadItemsForFileBubble(bubble);
+  }
+  if (bubble is _SharedCardBubble) {
+    return _downloadItemsForSharedCardBubble(bubble);
+  }
+  return const [];
+}
+
+List<GroupChatMediaDownloadItem> _downloadItemsForImageBubble(_ImageBubble bubble) {
+  if (bubble.uploading) return const [];
+  if (bubble.localBytes != null) {
+    return [
+      GroupChatMediaDownloadItem(
+        label: '保存图片',
+        suggestedFileName: sanitizeChatDownloadFileName(
+          fileNameFromUrl(bubble.url, fallback: 'chat_image.jpg'),
+        ),
+        kind: GroupChatMediaKind.image,
+        bytes: bubble.localBytes,
+      ),
+    ];
+  }
+  final url = bubble.url.trim();
+  if (url.isEmpty) return const [];
+  return [
+    GroupChatMediaDownloadItem(
+      label: '保存图片',
+      suggestedFileName: fileNameFromUrl(url, fallback: 'chat_image.jpg'),
+      kind: GroupChatMediaKind.image,
+      url: url,
+    ),
+  ];
+}
+
+List<GroupChatMediaDownloadItem> _downloadItemsForVoiceBubble(_VoiceBubble bubble) {
+  final url = bubble.url?.trim() ?? '';
+  if (url.isEmpty) return const [];
+  return [
+    GroupChatMediaDownloadItem(
+      label: '保存语音',
+      suggestedFileName: fileNameFromUrl(url, fallback: 'chat_voice.m4a'),
+      kind: GroupChatMediaKind.audio,
+      url: url,
+    ),
+  ];
+}
+
+List<GroupChatMediaDownloadItem> _downloadItemsForFileBubble(_FileBubble bubble) {
+  final url = bubble.url?.trim() ?? '';
+  if (url.isEmpty) return const [];
+  final fallback = bubble.fileName.trim().isNotEmpty
+      ? bubble.fileName.trim()
+      : 'chat_file.${bubble.fileType.isNotEmpty ? bubble.fileType : 'bin'}';
+  return [
+    GroupChatMediaDownloadItem(
+      label: '下载文件',
+      suggestedFileName: sanitizeChatDownloadFileName(fallback),
+      kind: GroupChatMediaKind.file,
+      url: url,
+    ),
+  ];
+}
+
+List<GroupChatMediaDownloadItem> _downloadItemsForSharedCardBubble(
+  _SharedCardBubble bubble,
+) {
+  final items = <GroupChatMediaDownloadItem>[];
+
+  void addImage(String url, String label) {
+    final resolved = url.trim();
+    if (resolved.isEmpty) return;
+    items.add(
+      GroupChatMediaDownloadItem(
+        label: label,
+        suggestedFileName: fileNameFromUrl(resolved, fallback: 'chat_image.jpg'),
+        kind: GroupChatMediaKind.image,
+        url: resolved,
+      ),
+    );
+  }
+
+  void addVideo(String url) {
+    final resolved = url.trim();
+    if (resolved.isEmpty) return;
+    items.add(
+      GroupChatMediaDownloadItem(
+        label: '保存视频',
+        suggestedFileName: fileNameFromUrl(resolved, fallback: 'chat_video.mp4'),
+        kind: GroupChatMediaKind.video,
+        url: resolved,
+      ),
+    );
+  }
+
+  void addAudio(String url) {
+    final resolved = url.trim();
+    if (resolved.isEmpty) return;
+    items.add(
+      GroupChatMediaDownloadItem(
+        label: '保存音频',
+        suggestedFileName: fileNameFromUrl(resolved, fallback: 'chat_audio.m4a'),
+        kind: GroupChatMediaKind.audio,
+        url: resolved,
+      ),
+    );
+  }
+
+  switch (bubble.subtype) {
+    case 'video':
+      addVideo(bubble.mediaUrl ?? '');
+      if (items.isEmpty) {
+        addImage(bubble.coverUrl ?? '', '保存封面');
+      }
+    case 'kj':
+      if (bubble.kjTypeValue == '1' && bubble.kjAudioUrl != null) {
+        addAudio(bubble.kjAudioUrl!);
+      }
+      for (final imageUrl in bubble.kjImageUrls) {
+        addImage(imageUrl, '保存图片');
+      }
+      if (items.isEmpty) {
+        addImage(bubble.coverUrl ?? '', '保存图片');
+      }
+    default:
+      addImage(bubble.coverUrl ?? '', '保存图片');
+  }
+
+  return items;
 }
 
 /// 根据分享内容的子类型跳转到对应详情页。
@@ -5872,12 +6038,14 @@ class _FileBubble extends _ChatBubble {
   const _FileBubble({
     required this.fileName,
     required this.fileSize,
-    required this.fileType, // 'pdf' / 'doc' ...
+    required this.fileType,
+    this.url,
   });
 
   final String fileName;
   final String fileSize;
   final String fileType;
+  final String? url;
 }
 
 /// 课件 / 视频 / 资讯 / 课程等富内容分享气泡（type=3，param1=kj/video/news/book）。
@@ -5889,7 +6057,8 @@ class _SharedCardBubble extends _ChatBubble {
     required this.subtitle,
     required this.subtype, // 'kj' / 'video' / 'news' / 'book'
     this.coverUrl,
-    this.contentId, // 用于跳转详情页的 id
+    this.contentId,
+    this.mediaUrl,
     // 云盘课件（kj）专用预览数据
     this.kjAudioUrl,
     this.kjImageUrls = const [],
@@ -5906,6 +6075,7 @@ class _SharedCardBubble extends _ChatBubble {
   final String subtype;
   final String? coverUrl;
   final String? contentId;
+  final String? mediaUrl;
 
   final String? kjAudioUrl;
   final List<String> kjImageUrls;
@@ -6037,6 +6207,9 @@ class GroupChatMessageParser {
             fileName: (obj?['name'] ?? '未命名文件').toString(),
             fileSize: (obj?['size'] ?? '').toString(),
             fileType: ((obj?['ext'] ?? 'pdf').toString()).toLowerCase(),
+            url: _resolveMediaUrl(
+              (obj?['url'] ?? obj?['path'] ?? obj?['fileUrl'])?.toString(),
+            ),
           );
           break;
         case 'kj':
@@ -6077,6 +6250,13 @@ class GroupChatMessageParser {
             subtype: 'video',
             coverUrl: _resolveMediaUrl(obj?['coverImg']?.toString()),
             contentId: obj?['id']?.toString(),
+            mediaUrl: _resolveMediaUrl(
+              (obj?['url'] ??
+                      obj?['videoUrl'] ??
+                      obj?['fileUrl'] ??
+                      obj?['path'])
+                  ?.toString(),
+            ),
             schoolMode:
                 _isTruthy(obj?['schoolMode']) || _isTruthy(obj?['school']),
             schoolId: _asInt(obj?['schoolId'] ?? obj?['school']),

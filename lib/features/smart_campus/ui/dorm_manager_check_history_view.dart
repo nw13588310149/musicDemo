@@ -33,7 +33,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
@@ -268,7 +267,6 @@ class _DormManagerCheckHistoryViewState
     final managerState = ref.watch(dormitoryManagerControllerProvider);
     final stat = managerState.historyStat;
     final historyItems = managerState.historyItems;
-    final loading = managerState.loadingHistory;
     final loadError = managerState.error;
     return Container(
       color: _kPageBg,
@@ -289,45 +287,40 @@ class _DormManagerCheckHistoryViewState
               absent: stat.notCheckedCount,
             ),
             SizedBox(height: ui(16)),
-            MainContentLoadingShell(
-              loading: loading && historyItems.isEmpty,
-              preserveChrome: true,
-              scrimColor: Colors.transparent,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _DateStripCard(
-                    days: _days,
-                    selectedIndex: _selectedDayIndex,
-                    dateText: _selectedDateText,
-                    statText: '共 ${historyItems.length} 条',
-                    onTapDay: _onTapDay,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _DateStripCard(
+                  days: _days,
+                  selectedIndex: _selectedDayIndex,
+                  dateText: _selectedDateText,
+                  statText: '共 ${historyItems.length} 条',
+                  onTapDay: _onTapDay,
+                ),
+                SizedBox(height: ui(16)),
+                _FilterRow(
+                  buildingOptions: managerState.managedBuildings,
+                  floorOptions: managerState.floorOptions,
+                  selectedBuilding: _selectedBuilding,
+                  selectedFloor: _selectedFloor,
+                  floorEnabled:
+                      _selectedBuilding.id.isNotEmpty &&
+                      !managerState.loadingFloors,
+                  onBuildingChanged: (v) => unawaited(_onBuildingChanged(v)),
+                  onFloorChanged: (v) => unawaited(_onFloorChanged(v)),
+                ),
+                SizedBox(height: ui(16)),
+                if (loadError.isNotEmpty)
+                  _LoadErrorHint(message: loadError, onRetry: _reloadAll)
+                else if (historyItems.isEmpty)
+                  const _EmptyState()
+                else
+                  _HistoryTable(
+                    items: historyItems,
+                    onHandleException: _handleException,
+                    onTapDetail: (item) => unawaited(_showCheckDetail(item)),
                   ),
-                  SizedBox(height: ui(16)),
-                  _FilterRow(
-                    buildingOptions: managerState.managedBuildings,
-                    floorOptions: managerState.floorOptions,
-                    selectedBuilding: _selectedBuilding,
-                    selectedFloor: _selectedFloor,
-                    floorEnabled:
-                        _selectedBuilding.id.isNotEmpty &&
-                        !managerState.loadingFloors,
-                    onBuildingChanged: (v) => unawaited(_onBuildingChanged(v)),
-                    onFloorChanged: (v) => unawaited(_onFloorChanged(v)),
-                  ),
-                  SizedBox(height: ui(16)),
-                  if (loadError.isNotEmpty)
-                    _LoadErrorHint(message: loadError, onRetry: _reloadAll)
-                  else if (historyItems.isEmpty)
-                    const _EmptyState()
-                  else
-                    _HistoryTable(
-                      items: historyItems,
-                      onHandleException: _handleException,
-                      onTapDetail: (item) => unawaited(_showCheckDetail(item)),
-                    ),
-                ],
-              ),
+              ],
             ),
           ],
         ),

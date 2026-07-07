@@ -25,6 +25,8 @@
 // 字体：PingFang SC（标题 16/正文 12-14）
 // =============================================================================
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
@@ -86,8 +88,9 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
   int _currentWeek = kScheduleCurrentTeachingWeek;
 
   List<_TimeConfig> _timeConfigs = const [];
-  List<List<List<ScheduleCourseCardData>>>? _serverCells;
-  bool _scheduleLoading = true;
+  late List<List<List<ScheduleCourseCardData>>> _serverCells;
+  int _scheduleLoadGeneration = 0;
+  bool _initialLoadDone = false;
 
   List<_TimeConfig> get _activeTimeConfigs =>
       _timeConfigs.isNotEmpty ? _timeConfigs : _kDefaultTimeConfigs;
@@ -107,6 +110,7 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
   @override
   void initState() {
     super.initState();
+    _serverCells = _emptyCells();
     final anchor = scheduleCurrentTeachingWeekAnchor();
     _weekStart = anchor.monday;
     _currentWeek = anchor.week;
@@ -158,24 +162,30 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
     setState(() => _timeConfigs = list);
   }
 
-  Future<void> _loadSchedule() async {
-    if (!mounted) return;
-    setState(() => _scheduleLoading = true);
+  Future<void> _loadSchedule({
+    DateTime? weekStart,
+    int? weekNumber,
+  }) async {
+    final targetWeekStart = weekStart ?? _weekStart;
+    final targetWeekNumber = weekNumber ?? _currentWeek;
+    final generation = ++_scheduleLoadGeneration;
 
-    final start = _weekStart;
+    final start = targetWeekStart;
     final end = start.add(const Duration(days: 6));
     final resp = await ref
         .read(studentRepositoryProvider)
         .courseList(beginDate: _isoDate(start), endDate: _isoDate(end));
-    if (!mounted) return;
+    if (!mounted || generation != _scheduleLoadGeneration) return;
 
     if (!resp.isSuccess) {
       if (resp.msg.isNotEmpty) {
         AppToast.show(context, resp.msg);
       }
       setState(() {
+        _weekStart = targetWeekStart;
+        _currentWeek = targetWeekNumber;
         _serverCells = _emptyCells();
-        _scheduleLoading = false;
+        _initialLoadDone = true;
       });
       return;
     }
@@ -186,6 +196,7 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
       final classId = _pickString(first, ['classId'], '');
       if (classId.isNotEmpty && _timeConfigs.isEmpty) {
         await _loadTimeConfigs(classId: classId);
+        if (!mounted || generation != _scheduleLoadGeneration) return;
       }
     }
 
@@ -198,7 +209,7 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
       final dateStr = entry.dateKey.isNotEmpty
           ? entry.dateKey
           : _pickString(flat, ['date', 'classDate', 'courseDate'], '');
-      final dayIdx = _dayIndex(dateStr);
+      final dayIdx = _dayIndex(dateStr, targetWeekStart);
       if (dayIdx < 0) continue;
 
       final lineNumRaw = flat['lineNum'];
@@ -217,35 +228,41 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
       cells[dayIdx][slotIdx].add(card);
     }
 
+    if (!mounted || generation != _scheduleLoadGeneration) return;
     setState(() {
+      _weekStart = targetWeekStart;
+      _currentWeek = targetWeekNumber;
       _serverCells = cells;
-      _scheduleLoading = false;
+      _initialLoadDone = true;
     });
   }
 
   void _gotoPrev() {
-    setState(() {
-      _weekStart = _weekStart.subtract(const Duration(days: 7));
-      _currentWeek = scheduleTeachingWeekOf(_weekStart);
-    });
-    _loadSchedule();
+    unawaited(
+      _loadSchedule(
+        weekStart: _weekStart.subtract(const Duration(days: 7)),
+        weekNumber: _currentWeek - 1,
+      ),
+    );
   }
 
   void _gotoNext() {
-    setState(() {
-      _weekStart = _weekStart.add(const Duration(days: 7));
-      _currentWeek = scheduleTeachingWeekOf(_weekStart);
-    });
-    _loadSchedule();
+    unawaited(
+      _loadSchedule(
+        weekStart: _weekStart.add(const Duration(days: 7)),
+        weekNumber: _currentWeek + 1,
+      ),
+    );
   }
 
   void _gotoCurrent() {
     final anchor = scheduleCurrentTeachingWeekAnchor();
-    setState(() {
-      _weekStart = anchor.monday;
-      _currentWeek = anchor.week;
-    });
-    _loadSchedule();
+    unawaited(
+      _loadSchedule(
+        weekStart: anchor.monday,
+        weekNumber: anchor.week,
+      ),
+    );
   }
 
   List<ScheduleGridDayHeader> _buildDayHeaders() {
@@ -306,7 +323,7 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
     ];
   }
 
-  int _dayIndex(String dateStr) {
+  int _dayIndex(String dateStr, [DateTime? weekStart]) {
     if (dateStr.isEmpty) return -1;
     DateTime? d = DateTime.tryParse(dateStr);
     if (d == null) {
@@ -315,7 +332,8 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
     }
     if (d == null) return -1;
     final dn = DateTime(d.year, d.month, d.day);
-    final ws = DateTime(_weekStart.year, _weekStart.month, _weekStart.day);
+    final anchor = weekStart ?? _weekStart;
+    final ws = DateTime(anchor.year, anchor.month, anchor.day);
     final diff = dn.difference(ws).inDays;
     return (diff < 0 || diff > 6) ? -1 : diff;
   }
@@ -323,7 +341,7 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final cells = _serverCells ?? _emptyCells();
+    final cells = _serverCells;
     final slots = _buildSlots(cells);
     final days = _buildDayHeaders();
 
@@ -338,20 +356,27 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
         onNextWeek: _gotoNext,
         onGotoCurrent: _gotoCurrent,
       ),
-      body: Padding(
-        padding: EdgeInsets.fromLTRB(ui(20), ui(11), ui(20), ui(20)),
-        child: PageInitLoadingShell(
-          loading: _scheduleLoading && _serverCells == null,
-          child: ScheduleGridShell(
-            slots: slots,
-            days: days,
-            body: _DaysBodyArea(
-              slots: slots,
-              days: days,
-              cells: cells,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(ui(20), ui(11), ui(20), ui(20)),
+              child: PageInitLoadingShell(
+                loading: !_initialLoadDone,
+                child: ScheduleGridShell(
+                  slots: slots,
+                  days: days,
+                  body: _DaysBodyArea(
+                    slots: slots,
+                    days: days,
+                    cells: cells,
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -726,14 +751,18 @@ class _DayBodyRow extends StatelessWidget {
                     left: 0,
                     right: 0,
                     bottom: 0,
-                    child: Container(height: 1, color: _kBorderSoft),
+                    child: IgnorePointer(
+                      child: Container(height: 1, color: _kBorderSoft),
+                    ),
                   ),
                   if (i != 0)
                     Positioned(
                       left: 0,
                       top: 0,
                       bottom: 0,
-                      child: Container(width: 1, color: _kBorderSoft),
+                      child: IgnorePointer(
+                        child: Container(width: 1, color: _kBorderSoft),
+                      ),
                     ),
                 ],
               ),
