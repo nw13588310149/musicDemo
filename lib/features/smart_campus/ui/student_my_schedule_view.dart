@@ -159,7 +159,10 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
     }
     list.sort((a, b) => a.lineNum.compareTo(b.lineNum));
     if (!mounted || list.isEmpty) return;
-    setState(() => _timeConfigs = list);
+    setState(() {
+      _timeConfigs = list;
+      _serverCells = _normalizeCells(_serverCells);
+    });
   }
 
   Future<void> _loadSchedule({
@@ -323,6 +326,21 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
     ];
   }
 
+  List<List<List<ScheduleCourseCardData>>> _normalizeCells(
+    List<List<List<ScheduleCourseCardData>>> cells,
+  ) {
+    final slotCount = _activeTimeConfigs.length;
+    return [
+      for (var d = 0; d < 7; d++)
+        [
+          for (var s = 0; s < slotCount; s++)
+            d < cells.length && s < cells[d].length
+                ? cells[d][s]
+                : <ScheduleCourseCardData>[],
+        ],
+    ];
+  }
+
   int _dayIndex(String dateStr, [DateTime? weekStart]) {
     if (dateStr.isEmpty) return -1;
     DateTime? d = DateTime.tryParse(dateStr);
@@ -341,7 +359,7 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final cells = _serverCells;
+    final cells = _normalizeCells(_serverCells);
     final slots = _buildSlots(cells);
     final days = _buildDayHeaders();
 

@@ -102,14 +102,18 @@ class SchoolBindingController extends StateNotifier<SchoolBindingState> {
     if (state.submitting) {
       return false;
     }
-    final id = state.schoolIdInput.trim();
-    if (id.isEmpty) {
-      state = state.copyWith(errorMessage: '请输入学校ID');
+    final code = state.schoolIdInput.trim();
+    if (code.isEmpty) {
+      state = state.copyWith(errorMessage: '请输入学校编码');
+      return false;
+    }
+    if (code.length != 6 || !RegExp(r'^\d{6}$').hasMatch(code)) {
+      state = state.copyWith(errorMessage: '请输入6位数字编码');
       return false;
     }
 
     state = state.copyWith(submitting: true, errorMessage: '');
-    final ApiResponse response = await _repository.submitSchoolBinding(id);
+    final ApiResponse response = await _repository.submitSchoolBinding(code);
     if (_disposed) return false;
 
     if (response.code != 0) {
@@ -224,7 +228,7 @@ class SchoolBindingController extends StateNotifier<SchoolBindingState> {
       // 后端没返原因时，按设计稿兜底文案。
       return _JoinParseResult(
         SchoolBindingStage.rejected,
-        raw.isEmpty ? '学校ID填写错误' : raw,
+        raw.isEmpty ? '学校编码填写错误' : raw,
       );
     }
     return const _JoinParseResult(SchoolBindingStage.initial, '');

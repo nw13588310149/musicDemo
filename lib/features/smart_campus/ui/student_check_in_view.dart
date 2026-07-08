@@ -2545,7 +2545,10 @@ class _HistoryDatePickerField extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(Icons.calendar_today_outlined, size: ui(16), color: _kPurple),
+            AppPickerAssetIcon(
+              AppAssets.iconScheduleCalendar,
+              imageSize: ui(18),
+            ),
             SizedBox(width: ui(8)),
             Expanded(
               child: Text(

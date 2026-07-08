@@ -12,7 +12,7 @@ const Color _kBoardBg = Color(0xFFF5F6FA);
 const Color _kBorderSoft = Color(0xFFF3F2F3);
 const Color _kPurple = Color(0xFF8741FF);
 
-const _profileHiddenFieldLabels = {'学生姓名', '学生', '姓名'};
+const _profileHiddenFieldLabels = {'学生姓名', '学生', '姓名', '学生学号', '学号'};
 
 Future<void> showDormitoryDetailDialog(
   BuildContext context, {

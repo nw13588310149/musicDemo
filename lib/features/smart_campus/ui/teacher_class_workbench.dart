@@ -4992,6 +4992,91 @@ class _ScoreDetailMeta extends StatelessWidget {
   }
 }
 
+String _pickDetailString(
+  Map<String, dynamic> json,
+  List<String> keys, [
+  String fallback = '',
+]) {
+  for (final k in keys) {
+    final v = json[k];
+    if (v == null) continue;
+    final s = v.toString().trim();
+    if (s.isNotEmpty && s.toLowerCase() != 'null') return s;
+  }
+  return fallback;
+}
+
+Map<String, dynamic> _pickDetailNestedMap(
+  Map<String, dynamic> json,
+  List<String> keys,
+) {
+  for (final k in keys) {
+    final v = json[k];
+    if (v is Map) return Map<String, dynamic>.from(v);
+  }
+  return const {};
+}
+
+String _parentDisplayName(Map<String, dynamic> parent) {
+  final nickname = _pickDetailString(parent, ['nickname', 'nickName']);
+  if (nickname.isNotEmpty) return nickname;
+  return _pickDetailString(parent, ['realname', 'realName', 'name']);
+}
+
+/// 将 `studentDetail` 嵌套响应（user / parents / dormitoryUser / schoolStudent）
+/// 展平为详情面板可直接读取的字段。
+Map<String, dynamic> _flattenStudentDetailJson(Map<String, dynamic> json) {
+  if (json['user'] is! Map) {
+    return Map<String, dynamic>.from(json);
+  }
+
+  final user = _pickDetailNestedMap(json, ['user']);
+  final schoolStudent = _pickDetailNestedMap(json, ['schoolStudent']);
+  final dormitoryUser = _pickDetailNestedMap(json, ['dormitoryUser']);
+  final parents = json['parents'] is List ? json['parents'] as List : const [];
+
+  final bedInfo = _pickDetailString(dormitoryUser, ['bedInfo']);
+  final bedId = _pickDetailString(dormitoryUser, ['bedId']);
+  final isLiving = bedInfo.isNotEmpty || (bedId.isNotEmpty && bedId != '0');
+  final dormitory = isLiving ? (bedInfo.isEmpty ? '宿舍' : bedInfo) : '走读';
+
+  final extra = <String, dynamic>{
+    'gender': _pickDetailString(user, ['gender', 'sex']),
+    'mobile': _pickDetailString(user, ['mobile', 'phone']),
+    'headUrl': _pickDetailString(user, ['headUrl', 'avatar', 'avatarUrl']),
+    'targetSchool': _pickDetailString(user, ['targetSchool']),
+    'dormitory': dormitory,
+    'tags': _pickDetailString(schoolStudent, ['tags']),
+    'remark': _pickDetailString(schoolStudent, ['remark']),
+  };
+
+  for (var i = 0; i < parents.length && i < 2; i++) {
+    if (parents[i] is! Map) continue;
+    final parent = Map<String, dynamic>.from(parents[i] as Map);
+    final name = _parentDisplayName(parent);
+    final relation = _pickDetailString(parent, ['relation', 'parentRelation']);
+    final mobile = _pickDetailString(parent, [
+      'mobile',
+      'phone',
+      'parentMobile',
+      'parentPhone',
+    ]);
+    if (i == 0) {
+      if (name.isNotEmpty) extra['guardianName'] = name;
+      if (relation.isNotEmpty) extra['guardianRelation'] = relation;
+      if (mobile.isNotEmpty) extra['guardianMobile'] = mobile;
+      if (name.isNotEmpty) extra['parentName'] = name;
+      if (mobile.isNotEmpty) extra['parentMobile'] = mobile;
+    } else {
+      if (name.isNotEmpty) extra['guardian2Name'] = name;
+      if (relation.isNotEmpty) extra['guardian2Relation'] = relation;
+      if (mobile.isNotEmpty) extra['guardian2Mobile'] = mobile;
+    }
+  }
+
+  return extra;
+}
+
 // =============================================================================
 // 学生档案详情面板（点击学生卡时从右侧滑出，20% 黑底蒙层覆盖左侧）
 // =============================================================================
@@ -5184,7 +5269,9 @@ class _StudentDetailPanelState extends ConsumerState<_StudentDetailPanel> {
     if (!mounted) return;
     if (res.isSuccess && res.data is Map) {
       setState(() {
-        _detailExtra = Map<String, dynamic>.from(res.data as Map);
+        _detailExtra = _flattenStudentDetailJson(
+          Map<String, dynamic>.from(res.data as Map),
+        );
         final tagsRaw = _detailExtra['tags']?.toString() ?? '';
         if (tagsRaw.isNotEmpty) {
           _selectedTags = tagsRaw
@@ -5405,7 +5492,7 @@ class _StudentDetailPanelState extends ConsumerState<_StudentDetailPanel> {
                                   children: [
                                     _DetailField(
                                       label: '性别：',
-                                      value: _detailField('gender', data.gender == '1' ? '男' : data.gender),
+                                      value: _detailField('gender', data.gender),
                                     ),
                                     _DetailField(
                                       label: '住宿：',
@@ -5416,8 +5503,8 @@ class _StudentDetailPanelState extends ConsumerState<_StudentDetailPanel> {
                                       value: _detailField('mobile', data.phone),
                                     ),
                                     _DetailField(
-                                      label: '常住地址：',
-                                      value: _detailField('address', '—'),
+                                      label: '目标院校：',
+                                      value: _detailField('targetSchool', '—'),
                                     ),
                                   ],
                                 ),

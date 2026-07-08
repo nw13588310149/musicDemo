@@ -434,7 +434,7 @@ class _SchoolIdInput extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // 「* 学校ID」前缀
+          // 「* 学校编码」前缀
           const Text(
             '*',
             style: TextStyle(
@@ -447,7 +447,7 @@ class _SchoolIdInput extends StatelessWidget {
           ),
           const SizedBox(width: 2),
           Text(
-            '学校ID',
+            '学校编码',
             style: TextStyle(
               color: const Color(0xFF0B081A),
               fontSize: 14,
@@ -461,10 +461,11 @@ class _SchoolIdInput extends StatelessWidget {
             child: AppTextField(
               controller: controller,
               onChanged: onChanged,
-              maxLength: 18,
-              keyboardType: TextInputType.text,
+              maxLength: 6,
+              keyboardType: TextInputType.number,
               inputFormatters: [
-                LengthLimitingTextInputFormatter(18),
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(6),
               ],
               cursorColor: const Color(0xFF8741FF),
               cursorWidth: 1.4,
@@ -480,7 +481,7 @@ class _SchoolIdInput extends StatelessWidget {
                 isCollapsed: true,
                 border: InputBorder.none,
                 counterText: '',
-                hintText: '请输入18位ID数',
+                hintText: '请输入6位编码',
                 hintStyle: TextStyle(
                   color: const Color(0xFFB6B5BB),
                   fontSize: 14,
@@ -508,7 +509,7 @@ class _StatusRow extends StatelessWidget {
     final prefix = isPending ? '当前状态：' : '未通过原因：';
     final accent = isPending
         ? '审核中'
-        : (state.rejectReason.isEmpty ? '学校ID填写错误' : state.rejectReason);
+        : (state.rejectReason.isEmpty ? '学校编码填写错误' : state.rejectReason);
     final accentColor = isPending
         ? const Color(0xFF325BFF)
         : const Color(0xFF8741FF);

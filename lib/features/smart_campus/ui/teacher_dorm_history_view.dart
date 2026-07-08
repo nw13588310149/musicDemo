@@ -35,6 +35,7 @@ import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
 import 'widgets/smart_campus_stat_card.dart';
+import '../data/student_dormitory_data.dart' show DormitoryDetailStudentProfile;
 import '../data/teacher_dormitory_data.dart';
 import '../state/teacher_dormitory_controller.dart';
 import 'widgets/dormitory_detail_dialog.dart';
@@ -177,10 +178,21 @@ class _TeacherDormHistoryViewState
       AppToast.show(context, '未获取到查寝详情');
       return;
     }
+    final rawAvatar = record.headUrl.trim();
+    final avatarUrl =
+        rawAvatar.isNotEmpty ? MediaUrl.resolve(rawAvatar) : '';
+    final subtitle = record.studentNo.isNotEmpty && record.studentNo != '--'
+        ? record.studentNo
+        : record.dormName;
     await showDormitoryDetailDialog(
       context,
       title: '${record.studentName} · 查寝详情',
       fields: fields,
+      studentProfile: DormitoryDetailStudentProfile(
+        name: record.studentName,
+        avatarUrl: avatarUrl,
+        subtitle: subtitle,
+      ),
     );
   }
 

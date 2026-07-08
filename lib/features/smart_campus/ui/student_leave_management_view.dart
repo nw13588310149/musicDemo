@@ -25,8 +25,8 @@
 //        已拒绝 #FFE4E5+#FF323C / 已撤销 灰底灰字）。
 //      · 内嵌灰底卡（#F5F6FA，padding 16）：5 行 label-value
 //        （请假时间 / 请假事由 / 申请时间 / 路径 / 备注）；
-//        中间一段 horizontal stepper：
-//           家长 [已通过] ─────────── 班主任 [待审批/已通过/已拒绝]
+//        中间一段 horizontal stepper（多节点；连接线仅在相邻节点之间）：
+//           发起 [已发起] ───── 家长 [已通过] ───── 班主任 [待审批/已通过/已拒绝]
 //        进度点：未到为白底灰描边，激活/到达态使用对应色填充（待审批用 #FF6A00
 //        橙；通过用 #12CE51 绿；拒绝用 #FF323C 红）。
 //      · footer：审批中卡多一行 40 高描边按钮"撤销申请"。
@@ -950,35 +950,25 @@ class _ApprovalStepper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    if (steps.isEmpty) {
+      return const SizedBox.shrink();
+    }
     return Padding(
       padding: EdgeInsets.symmetric(vertical: ui(4)),
-      child: SizedBox(
-        height: ui(20),
-        child: LayoutBuilder(
-          builder: (context, c) {
-            final w = c.maxWidth;
-            // 两个节点居中分布在两侧 25% / 75% 处。
-            final positions = [w * 0.18, w * 0.62];
-            return Stack(
-              clipBehavior: Clip.none,
-              children: [
-                // 横线
-                Positioned(
-                  left: ui(8),
-                  right: ui(8),
-                  top: ui(9),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          for (var i = 0; i < steps.length; i++) ...[
+            _ApprovalNodeView(step: steps[i]),
+            if (i < steps.length - 1)
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: ui(8)),
                   child: Container(height: 1, color: _kBorderHair),
                 ),
-                for (var i = 0; i < steps.length; i++)
-                  Positioned(
-                    left: positions[i],
-                    top: 0,
-                    child: _ApprovalNodeView(step: steps[i]),
-                  ),
-              ],
-            );
-          },
-        ),
+              ),
+          ],
+        ],
       ),
     );
   }
@@ -1027,6 +1017,7 @@ class _ApprovalNodeView extends StatelessWidget {
     final hasHalo = step.state != _StepState.dim;
 
     return Row(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         SizedBox(
@@ -1086,7 +1077,7 @@ class _ApprovalNodeView extends StatelessWidget {
               color: labelFg,
               fontFamily: 'PingFang SC',
               fontWeight: AppFont.w400,
-              height: 15.24 / 12,
+              height: 1,
             ),
           ),
         ),
@@ -1182,20 +1173,106 @@ _LeaveRecord _mapLeaveRecord(StudentLeaveRecord source) {
     reason: source.reason,
     appliedAt: source.appliedAt,
     flowPath: source.path,
-    steps: [
-      _ApprovalStep(
-        title: '家长',
-        label: source.parentStep.label,
-        state: _stepStateFromApi(source.parentStep),
-      ),
-      _ApprovalStep(
-        title: '班主任',
-        label: _headTeacherStepLabel(source),
-        state: _headTeacherStepState(source),
-      ),
-    ],
+    steps: _buildLeaveApprovalSteps(source),
     note: source.note,
     status: _leaveStatusFromApi(source.status),
+  );
+}
+
+/// 审批进度节点：首位固定「发起」，其余按 [StudentLeaveRecord.path] 解析。
+List<_ApprovalStep> _buildLeaveApprovalSteps(StudentLeaveRecord source) {
+  final steps = <_ApprovalStep>[
+    const _ApprovalStep(
+      title: '发起',
+      label: '已发起',
+      state: _StepState.passed,
+    ),
+  ];
+
+  final segments = _parseLeaveFlowPathSegments(source.path);
+  if (segments.isEmpty) {
+    steps.addAll(_defaultApprovalPathSteps(source));
+    return steps;
+  }
+
+  final seenTitles = <String>{'发起'};
+  for (final segment in segments) {
+    final step = _approvalStepForFlowSegment(segment, source);
+    if (step == null || seenTitles.contains(step.title)) {
+      continue;
+    }
+    seenTitles.add(step.title);
+    steps.add(step);
+  }
+
+  if (steps.length == 1) {
+    steps.addAll(_defaultApprovalPathSteps(source));
+  }
+  return steps;
+}
+
+List<_ApprovalStep> _defaultApprovalPathSteps(StudentLeaveRecord source) {
+  return [
+    _ApprovalStep(
+      title: '家长',
+      label: source.parentStep.label,
+      state: _stepStateFromApi(source.parentStep),
+    ),
+    _ApprovalStep(
+      title: '班主任',
+      label: _headTeacherStepLabel(source),
+      state: _headTeacherStepState(source),
+    ),
+  ];
+}
+
+List<String> _parseLeaveFlowPathSegments(String path) {
+  final trimmed = path.trim();
+  if (trimmed.isEmpty) {
+    return const [];
+  }
+  return trimmed
+      .split(RegExp(r'[→➔\->\-—]+'))
+      .map((segment) => segment.trim())
+      .where((segment) => segment.isNotEmpty && !_isInitiateFlowSegment(segment))
+      .toList();
+}
+
+bool _isInitiateFlowSegment(String segment) {
+  final normalized = segment.trim();
+  return normalized == '发起' ||
+      normalized.contains('学生发起') ||
+      normalized.endsWith('发起');
+}
+
+_ApprovalStep? _approvalStepForFlowSegment(
+  String segment,
+  StudentLeaveRecord source,
+) {
+  final normalized = segment.trim();
+  if (normalized.isEmpty || _isInitiateFlowSegment(normalized)) {
+    return null;
+  }
+
+  if (normalized.contains('家长')) {
+    return _ApprovalStep(
+      title: '家长',
+      label: source.parentStep.label,
+      state: _stepStateFromApi(source.parentStep),
+    );
+  }
+  if (normalized.contains('班主任')) {
+    return _ApprovalStep(
+      title: '班主任',
+      label: _headTeacherStepLabel(source),
+      state: _headTeacherStepState(source),
+    );
+  }
+
+  return _ApprovalStep(
+    title: normalized,
+    label: '待处理',
+    state: _StepState.dim,
   );
 }
 
@@ -1692,10 +1769,9 @@ class _DateField extends StatelessWidget {
                 ),
               ),
             ),
-            Icon(
-              Icons.calendar_today_rounded,
-              size: ui(16),
-              color: const Color(0xFF1C274C),
+            AppPickerAssetIcon(
+              AppAssets.iconScheduleCalendar,
+              imageSize: ui(18),
             ),
           ],
         ),

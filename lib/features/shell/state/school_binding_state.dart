@@ -50,7 +50,7 @@ class SchoolBindingState {
   /// 兜底文案在控制器里统一塞入，UI 直接读即可。
   final String rejectReason;
 
-  /// 用户在输入框里键入的学校 ID（trim 后），跨 stage 不自动清空——
+  /// 用户在输入框里键入的 6 位学校编码（trim 后），跨 stage 不自动清空——
   /// 只有「重新绑定」与「提交成功」两个时机由控制器主动清空。
   final String schoolIdInput;
 

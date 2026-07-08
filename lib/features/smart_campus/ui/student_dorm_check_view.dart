@@ -1268,7 +1268,10 @@ class _DatePickerField extends StatelessWidget {
                 ),
               ),
             ),
-            Icon(Icons.calendar_today_outlined, size: ui(16), color: _kPurple),
+            AppPickerAssetIcon(
+              AppAssets.iconScheduleCalendar,
+              imageSize: ui(18),
+            ),
           ],
         ),
       ),
