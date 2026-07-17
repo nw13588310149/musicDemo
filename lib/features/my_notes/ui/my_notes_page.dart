@@ -1203,22 +1203,30 @@ class _NoteEditorView extends StatelessWidget {
             height: ui(44),
             child: Row(
               children: [
-                _RoundIconButton(
-                  icon: Icons.arrow_back_rounded,
-                  onTap: onBack,
+                // 左右等宽占位，保证标题相对整行居中、保存按钮贴右。
+                SizedBox(
+                  width: ui(96),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: _RoundIconButton(
+                      icon: Icons.arrow_back_rounded,
+                      onTap: onBack,
+                    ),
+                  ),
                 ),
-                const Spacer(),
-                Flexible(
+                Expanded(
                   child: GestureDetector(
                     onTap: () => onEditTitle(),
+                    behavior: HitTestBehavior.opaque,
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Flexible(
                           child: Text(
                             state.draftTitle,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: ui(20),
                               fontWeight: FontWeight.w600,
@@ -1226,22 +1234,27 @@ class _NoteEditorView extends StatelessWidget {
                             ),
                           ),
                         ),
-                        SizedBox(width: ui(6)),
+                        SizedBox(width: ui(4)),
                         Icon(
                           Icons.edit_outlined,
-                          size: ui(18),
+                          size: ui(16),
                           color: const Color(0xFF8B879A),
                         ),
                       ],
                     ),
                   ),
                 ),
-                const Spacer(),
-                _SecondaryActionButton(
-                  label: '保存',
-                  icon: Icons.save_outlined,
-                  busy: state.busy,
-                  onPressed: state.busy ? null : onSave,
+                SizedBox(
+                  width: ui(96),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: _SecondaryActionButton(
+                      label: '保存',
+                      icon: Icons.save_outlined,
+                      busy: state.busy,
+                      onPressed: state.busy ? null : onSave,
+                    ),
+                  ),
                 ),
               ],
             ),

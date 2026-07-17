@@ -448,9 +448,11 @@ class NoteDrawingSurfaceState extends State<NoteDrawingSurface> {
           isRulerActive: false,
           isOpaque: false,
           backgroundColor: Colors.transparent,
-          // pencil_kit 2.1.1 把枚举名与 Apple rawValue 写反了：
-          // onlyPencil(2) == PKCanvasViewDrawingPolicy.anyInput。
-          drawingPolicy: PencilKitIos14DrawingPolicy.onlyPencil,
+          // anyInput(1) == PKCanvasViewDrawingPolicy.anyInput：Apple Pencil 与
+          // 手指都能书写（对齐系统备忘录默认行为）。若要「仅 Apple Pencil」，
+          // 系统会在用户开启 设置 > Apple Pencil > 仅用 Apple Pencil 绘图 时
+          // 通过 PKToolPicker 尊重该偏好；此处不隐藏手指输入以保证触摸兼容。
+          drawingPolicy: PencilKitIos14DrawingPolicy.anyInput,
           unAvailableFallback: const ColoredBox(color: Colors.transparent),
           onPencilKitViewCreated: _onPencilKitCreated,
           canvasViewDrawingDidChange: _onIosDrawingChanged,
