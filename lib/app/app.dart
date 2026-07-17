@@ -136,6 +136,10 @@ class _MyAppState extends ConsumerState<MyApp> {
       // 文案走中文；保留 en 是为了在系统语言为英文且用户清掉本地缓存时
       // 仍有兜底，不至于回退到 ARB 缺失的 Locale 报错。
       locale: const Locale('zh', 'CN'),
+      localeListResolutionCallback: (locales, supportedLocales) {
+        // 无论系统语言为何，框架层编辑菜单（全选/复制/粘贴等）统一走中文。
+        return const Locale('zh', 'CN');
+      },
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,

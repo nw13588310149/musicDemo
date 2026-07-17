@@ -52,9 +52,11 @@
 // 字体：PingFang SC（中文） + Barlow（数字 32 / 20）
 // =============================================================================
 
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -2400,6 +2402,129 @@ StudentExamMediaKind? _examMediaKindFromName(String name) {
   return null;
 }
 
+/// iOS / iPad 考试作品上传类型；走对应 [CoursewarePickType] 以拉起系统相册。
+enum _ExamUploadKind { video, audio, image }
+
+extension _ExamUploadKindX on _ExamUploadKind {
+  CoursewarePickType get pickType => switch (this) {
+    _ExamUploadKind.video => CoursewarePickType.video,
+    _ExamUploadKind.audio => CoursewarePickType.audio,
+    _ExamUploadKind.image => CoursewarePickType.image,
+  };
+
+  String get sheetLabel => switch (this) {
+    _ExamUploadKind.video => '从相册选择视频',
+    _ExamUploadKind.audio => '选择音频文件',
+    _ExamUploadKind.image => '从相册选择照片',
+  };
+}
+
+/// iOS 上 [CoursewarePickType.any] 会打开 UIDocumentPicker；先选类型再进相册。
+Future<CoursewarePickType?> _resolveExamUploadPickType(
+  BuildContext context,
+) async {
+  if (kIsWeb || !Platform.isIOS) return CoursewarePickType.any;
+  final scale = DashboardScaleScope.of(context);
+  return showModalBottomSheet<CoursewarePickType>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    barrierColor: Colors.black.withValues(alpha: 0.80),
+    isScrollControlled: true,
+    builder: (ctx) => DashboardScaleScope(
+      data: scale,
+      child: const _ExamUploadKindSheet(),
+    ),
+  );
+}
+
+class _ExamUploadKindSheet extends StatelessWidget {
+  const _ExamUploadKindSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final kinds = _ExamUploadKind.values;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(ui(20), 0, ui(20), ui(20)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: ui(377)),
+              child: Container(
+                width: double.infinity,
+                padding: EdgeInsets.symmetric(vertical: ui(8)),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(ui(16)),
+                ),
+                child: Column(
+                  children: [
+                    for (var i = 0; i < kinds.length; i++) ...[
+                      if (i > 0)
+                        Container(height: 1, color: const Color(0x33000000)),
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => Navigator.of(
+                          context,
+                        ).pop(kinds[i].pickType),
+                        child: SizedBox(
+                          height: ui(56),
+                          child: Center(
+                            child: Text(
+                              kinds[i].sheetLabel,
+                              style: TextStyle(
+                                color: _kTextDark,
+                                fontSize: ui(20),
+                                fontFamily: 'PingFang SC',
+                                fontWeight: AppFont.w400,
+                                height: 24 / 20,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            SizedBox(height: ui(8)),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: ui(377)),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => Navigator.of(context).pop(),
+                child: Container(
+                  width: double.infinity,
+                  height: ui(56),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(ui(16)),
+                  ),
+                  child: Text(
+                    '取消',
+                    style: TextStyle(
+                      color: _kTextDark,
+                      fontSize: ui(20),
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w600,
+                      height: 24 / 20,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // =============================================================================
 // 我的考场座位弹窗（student/examSeat）
 // =============================================================================
@@ -3513,7 +3638,7 @@ class _ExamDetailDrawerState extends ConsumerState<_ExamDetailDrawer> {
   }
 
   /// 在线科目：选文件（视频/音频/图片）→ 上传文件服务器（带进度）→ 调 examSubmit → 刷新。
-  /// 单个「上传文件」按钮：系统选择器选任意文件，按扩展名识别视频 / 音频 / 图片。
+  /// iOS / iPad 先选媒体类型再进相册；其它平台走通用文件选择器。
   Future<void> _upload(StudentExamSubjectPlan subject) async {
     if (_busy || !subject.serverCanSubmit) return;
     setState(() {
@@ -3523,9 +3648,15 @@ class _ExamDetailDrawerState extends ConsumerState<_ExamDetailDrawer> {
       _submitting = false;
     });
     try {
+      final pickType = await _resolveExamUploadPickType(context);
+      if (!mounted) return;
+      if (pickType == null) {
+        _resetUpload();
+        return;
+      }
       final files = await pickCoursewareFiles(
         allowMultiple: false,
-        type: CoursewarePickType.any,
+        type: pickType,
       );
       if (!mounted) return;
       if (files.isEmpty) {

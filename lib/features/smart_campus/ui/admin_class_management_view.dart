@@ -3137,9 +3137,9 @@ class _ClassKindSelector extends StatelessWidget {
 
     return Row(
       children: [
-        Expanded(child: cell(_ClassKind.largeClass, '大班（班主任+教室）')),
+        Expanded(child: cell(_ClassKind.largeClass, '大课（班主任+教室）')),
         SizedBox(width: ui(20)),
-        Expanded(child: cell(_ClassKind.smallClass, '小班（任课老师）')),
+        Expanded(child: cell(_ClassKind.smallClass, '小课（任课老师）')),
       ],
     );
   }

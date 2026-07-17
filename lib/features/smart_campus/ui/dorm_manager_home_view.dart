@@ -42,7 +42,7 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 /// - 顶部 72 圆形头像 + 「Grey黎」16/500 + 绿点「在岗」+ 蓝底「宿管老师」徽章；
 /// - 「区域：男生公寓1-3号楼 / 女生公寓A区」+「权限：管辖区域宿舍管理」+
 ///   「职责：生活辅导员·宿管值班」；
-/// - 「通知」title + 滚动通知列表（后勤 / 联动 / 制度 / 大师课 等）。
+/// - 「校级通知」title + 滚动通知列表（后勤 / 联动 / 制度 / 大师课 等）。
 ///
 /// 不带 `onBack` —— 这就是 dormManager 角色下 `mainView == dashboard` 的根
 /// 视图，不会被 `controller.backToDashboard()` 弹出。
@@ -939,7 +939,7 @@ class _DormManagerSidePanel extends StatelessWidget {
           avatarUrl: avatarUrl,
           institutionName: institutionName,
         ),
-        SizedBox(height: ui(16)),
+        SizedBox(height: ui(20)),
         _ProfileDetailRows(areas: managedAreas),
         if (showRoleSwitcher) ...[
           SizedBox(height: ui(20)),
@@ -962,7 +962,7 @@ class _DormManagerSidePanel extends StatelessWidget {
         ],
         SizedBox(height: ui(24)),
         Text(
-          '通知',
+          '校级通知',
           style: TextStyle(
             fontSize: ui(16),
             height: 1.2,
@@ -973,7 +973,12 @@ class _DormManagerSidePanel extends StatelessWidget {
         ),
         SizedBox(height: ui(12)),
         if (fillHeight)
-          const Expanded(child: _DormNoticePanel())
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              child: const _DormNoticePanel(),
+            ),
+          )
         else
           const _DormNoticePanel(),
       ],
@@ -1139,17 +1144,18 @@ class _ProfileDetailRows extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
     final rows = areas.isEmpty ? const ['暂无管辖区域'] : areas;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (var i = 0; i < rows.length; i++) ...[
-          if (i > 0) const SizedBox(height: 4),
+          if (i > 0) SizedBox(height: ui(4)),
           _AreaLine(label: '区域：', value: rows[i]),
         ],
-        const SizedBox(height: 4),
+        SizedBox(height: ui(4)),
         const _AreaLine(label: '权限：', value: _permission),
-        const SizedBox(height: 4),
+        SizedBox(height: ui(4)),
         const _AreaLine(label: '职责：', value: _duty),
       ],
     );
@@ -1179,6 +1185,8 @@ class _AreaLine extends StatelessWidget {
         Expanded(
           child: Text(
             value,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: ui(12),
               height: 1.2,
@@ -1234,28 +1242,32 @@ class _DormNoticePanelState extends ConsumerState<_DormNoticePanel> {
     final ui = DashboardScaleScope.of(context).ui;
     final state = ref.watch(dormitoryManagerControllerProvider);
     if (state.notices.isEmpty) {
-      return Center(
-        child: Text(
-          state.noticeError.isEmpty ? '暂无通知' : state.noticeError,
-          style: TextStyle(
-            fontSize: ui(12),
-            color: const Color(0xFFCECED1),
-            fontFamily: 'PingFang SC',
+      return Padding(
+        padding: EdgeInsets.symmetric(vertical: ui(24)),
+        child: Center(
+          child: Text(
+            state.noticeError.isEmpty ? '暂无已发布通知' : state.noticeError,
+            style: TextStyle(
+              fontSize: ui(12),
+              color: const Color(0xFFB6B5BB),
+              fontFamily: 'PingFang SC',
+            ),
           ),
         ),
       );
     }
-    return ListView.separated(
-      padding: EdgeInsets.zero,
-      itemCount: state.notices.length,
-      separatorBuilder: (_, _) => SizedBox(height: ui(8)),
-      itemBuilder: (_, i) {
-        final item = state.notices[i];
-        return _SchoolNoticeCard(
-          item: item,
-          onTap: () => unawaited(_openNoticeDetail(item)),
-        );
-      },
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < state.notices.length; i++) ...[
+          if (i > 0) SizedBox(height: ui(8)),
+          _SchoolNoticeCard(
+            item: state.notices[i],
+            onTap: () => unawaited(_openNoticeDetail(state.notices[i])),
+          ),
+        ],
+      ],
     );
   }
 }

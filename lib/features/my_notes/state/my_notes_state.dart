@@ -33,6 +33,8 @@ enum NotePaperType {
   }
 }
 
+enum NoteToolMode { pen, eraser }
+
 class NoteCategoryItem {
   const NoteCategoryItem({
     required this.id,
@@ -61,6 +63,7 @@ class NoteEntry {
     required this.imageUrl,
     required this.createdAt,
     required this.paperType,
+    this.drawingData = '',
     this.isFavorite = false,
   });
 
@@ -68,6 +71,9 @@ class NoteEntry {
   final int categoryId;
   final String title;
   final String imageUrl;
+
+  /// 矢量笔迹：`param2`（内联 `pk:`/`strokes:` 或文件 path）。
+  final String drawingData;
   final DateTime createdAt;
   final NotePaperType paperType;
   final bool isFavorite;
@@ -83,6 +89,7 @@ class NoteEntry {
     int? categoryId,
     String? title,
     String? imageUrl,
+    String? drawingData,
     DateTime? createdAt,
     NotePaperType? paperType,
     bool? isFavorite,
@@ -92,6 +99,7 @@ class NoteEntry {
       categoryId: categoryId ?? this.categoryId,
       title: title ?? this.title,
       imageUrl: imageUrl ?? this.imageUrl,
+      drawingData: drawingData ?? this.drawingData,
       createdAt: createdAt ?? this.createdAt,
       paperType: paperType ?? this.paperType,
       isFavorite: isFavorite ?? this.isFavorite,
@@ -124,10 +132,14 @@ class MyNotesState {
     this.paperType = NotePaperType.blank,
     this.draftTitle = '笔记名称',
     this.strokes = const <NoteStroke>[],
+    this.redoStrokes = const <NoteStroke>[],
+    this.toolMode = NoteToolMode.pen,
     this.selectedColor = const Color(0xFF2A2A2A),
     this.strokeWidth = 12,
     this.editingNote,
     this.editorBackgroundImageUrl,
+    this.pendingPencilKitData,
+    this.editorHasVectorLayer = false,
   });
 
   final bool loading;
@@ -141,10 +153,18 @@ class MyNotesState {
   final NotePaperType paperType;
   final String draftTitle;
   final List<NoteStroke> strokes;
+  final List<NoteStroke> redoStrokes;
+  final NoteToolMode toolMode;
   final Color selectedColor;
   final double strokeWidth;
   final NoteEntry? editingNote;
   final String? editorBackgroundImageUrl;
+
+  /// 打开笔记后待注入 PencilKit 的 base64（注入成功后清空）。
+  final String? pendingPencilKitData;
+
+  /// 当前编辑会话是否已加载矢量层（有则不再把 param1 PNG 当笔迹底图）。
+  final bool editorHasVectorLayer;
 
   List<NoteEntry> get visibleNotes {
     final sorted = <NoteEntry>[...notes]
@@ -155,6 +175,9 @@ class MyNotesState {
       MyNotesFilter.favorite => sorted.where((e) => e.isFavorite).toList(),
     };
   }
+
+  bool get canUndoStrokes => strokes.isNotEmpty;
+  bool get canRedoStrokes => redoStrokes.isNotEmpty;
 
   MyNotesState copyWith({
     bool? loading,
@@ -169,12 +192,17 @@ class MyNotesState {
     NotePaperType? paperType,
     String? draftTitle,
     List<NoteStroke>? strokes,
+    List<NoteStroke>? redoStrokes,
+    NoteToolMode? toolMode,
     Color? selectedColor,
     double? strokeWidth,
     NoteEntry? editingNote,
     bool clearEditingNote = false,
     String? editorBackgroundImageUrl,
     bool clearEditorBackgroundImageUrl = false,
+    String? pendingPencilKitData,
+    bool clearPendingPencilKitData = false,
+    bool? editorHasVectorLayer,
   }) {
     return MyNotesState(
       loading: loading ?? this.loading,
@@ -188,12 +216,18 @@ class MyNotesState {
       paperType: paperType ?? this.paperType,
       draftTitle: draftTitle ?? this.draftTitle,
       strokes: strokes ?? this.strokes,
+      redoStrokes: redoStrokes ?? this.redoStrokes,
+      toolMode: toolMode ?? this.toolMode,
       selectedColor: selectedColor ?? this.selectedColor,
       strokeWidth: strokeWidth ?? this.strokeWidth,
       editingNote: clearEditingNote ? null : (editingNote ?? this.editingNote),
       editorBackgroundImageUrl: clearEditorBackgroundImageUrl
           ? null
           : (editorBackgroundImageUrl ?? this.editorBackgroundImageUrl),
+      pendingPencilKitData: clearPendingPencilKitData
+          ? null
+          : (pendingPencilKitData ?? this.pendingPencilKitData),
+      editorHasVectorLayer: editorHasVectorLayer ?? this.editorHasVectorLayer,
     );
   }
 }

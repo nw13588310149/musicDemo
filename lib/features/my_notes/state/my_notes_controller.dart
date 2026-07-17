@@ -1,13 +1,17 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_response.dart';
+import '../../../core/network/media_url.dart';
 import '../../../core/network/upload_result.dart';
 import '../data/my_notes_repository.dart';
 import 'my_notes_state.dart';
+import 'note_drawing_codec.dart';
 
 final myNotesControllerProvider =
     StateNotifierProvider.autoDispose<MyNotesController, MyNotesState>((ref) {
@@ -23,6 +27,10 @@ class MyNotesController extends StateNotifier<MyNotesState> {
   }
 
   final MyNotesRepository _repository;
+
+  /// Android 笔迹历史：add 存单笔；erase 存被删多笔，供 undo/redo。
+  final List<_StrokeHistoryOp> _undoOps = <_StrokeHistoryOp>[];
+  final List<_StrokeHistoryOp> _redoOps = <_StrokeHistoryOp>[];
 
   Future<void> refresh() async {
     try {
@@ -94,8 +102,13 @@ class MyNotesController extends StateNotifier<MyNotesState> {
             : response.displayMsg,
         clearEditingNote: true,
         clearEditorBackgroundImageUrl: true,
+        clearPendingPencilKitData: true,
         strokes: const <NoteStroke>[],
+        redoStrokes: const <NoteStroke>[],
+        toolMode: NoteToolMode.pen,
+        editorHasVectorLayer: false,
       );
+      _clearStrokeHistory();
     } catch (_) {
       state = state.copyWith(loading: false, errorMessage: '');
     }
@@ -165,16 +178,10 @@ class MyNotesController extends StateNotifier<MyNotesState> {
     if (!response.isSuccess) {
       return response.displayMsg;
     }
-    // `selectCategory(currentId)` short-circuits when the requested category
-    // matches the active one, so use `refresh()` instead to force a re-fetch
-    // (also keeps the sidebar's category counts up to date).
     await refresh();
     return null;
   }
 
-  /// Renames an existing note in-place via `/app/user/noteUpdate`.
-  /// On success the current category's note list is refreshed so the new
-  /// title appears in the grid immediately.
   Future<String?> renameNote(NoteEntry note, String newTitle) async {
     final trimmed = newTitle.trim();
     if (trimmed.isEmpty) {
@@ -194,20 +201,16 @@ class MyNotesController extends StateNotifier<MyNotesState> {
       paperType: note.paperType.value,
       title: trimmed,
       imageUrl: note.imageUrl,
+      param2: note.drawingData.isEmpty ? 'string' : note.drawingData,
     );
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
       return response.displayMsg;
     }
-    // Same as deleteNote: `selectCategory(currentId)` would early-return,
-    // so go through `refresh()` to actually re-pull the notes list and
-    // make the new title appear in the grid.
     await refresh();
     return null;
   }
 
-  /// 在弹出"新建笔记标题"输入框之前调用，用于校验当前是否存在可写入的
-  /// 分类。返回 `null` 表示可以继续，否则返回需要展示给用户的错误提示。
   String? validateCanCreateNote() {
     if (_writeCategoryId <= 0) {
       return '请先新增笔记分类';
@@ -215,8 +218,6 @@ class MyNotesController extends StateNotifier<MyNotesState> {
     return null;
   }
 
-  /// 进入"选择笔记样式"页面。如果调用方提前收集了用户输入的标题，
-  /// 则通过 [title] 传入并写入草稿；为空时回落到默认占位文案。
   String? beginCreateNote({String? title}) {
     if (_writeCategoryId <= 0) {
       return '请先新增笔记分类';
@@ -227,10 +228,15 @@ class MyNotesController extends StateNotifier<MyNotesState> {
       draftTitle: trimmed.isEmpty ? '笔记名称' : trimmed,
       paperType: NotePaperType.staff,
       strokes: const <NoteStroke>[],
+      redoStrokes: const <NoteStroke>[],
+      toolMode: NoteToolMode.pen,
       clearEditingNote: true,
       clearEditorBackgroundImageUrl: true,
+      clearPendingPencilKitData: true,
+      editorHasVectorLayer: false,
       clearError: true,
     );
+    _clearStrokeHistory();
     return null;
   }
 
@@ -238,10 +244,15 @@ class MyNotesController extends StateNotifier<MyNotesState> {
     state = state.copyWith(
       view: MyNotesView.list,
       strokes: const <NoteStroke>[],
+      redoStrokes: const <NoteStroke>[],
+      toolMode: NoteToolMode.pen,
       clearEditingNote: true,
       clearEditorBackgroundImageUrl: true,
+      clearPendingPencilKitData: true,
+      editorHasVectorLayer: false,
       clearError: true,
     );
+    _clearStrokeHistory();
   }
 
   void chooseTemplate(NotePaperType type) {
@@ -250,12 +261,18 @@ class MyNotesController extends StateNotifier<MyNotesState> {
       paperType: type,
       draftTitle: state.draftTitle.isEmpty ? '笔记名称' : state.draftTitle,
       strokes: const <NoteStroke>[],
+      redoStrokes: const <NoteStroke>[],
+      toolMode: NoteToolMode.pen,
       clearEditingNote: true,
       clearEditorBackgroundImageUrl: true,
+      clearPendingPencilKitData: true,
+      editorHasVectorLayer: false,
     );
+    _clearStrokeHistory();
   }
 
-  void openExistingNote(NoteEntry note) {
+  Future<void> openExistingNote(NoteEntry note) async {
+    _clearStrokeHistory();
     state = state.copyWith(
       view: MyNotesView.editor,
       draftTitle: note.title,
@@ -263,16 +280,94 @@ class MyNotesController extends StateNotifier<MyNotesState> {
       editingNote: note,
       editorBackgroundImageUrl: note.imageUrl.isEmpty ? null : note.imageUrl,
       strokes: const <NoteStroke>[],
+      redoStrokes: const <NoteStroke>[],
+      toolMode: NoteToolMode.pen,
+      clearPendingPencilKitData: true,
+      editorHasVectorLayer: false,
       clearError: true,
+      busy: true,
     );
+
+    final payload = await _resolveDrawingPayload(note.drawingData);
+    if (payload == null) {
+      // 旧笔记：保留 param1 底图叠画。
+      state = state.copyWith(busy: false, editorHasVectorLayer: false);
+      return;
+    }
+
+    switch (payload.kind) {
+      case NoteDrawingKind.pencilKit:
+        state = state.copyWith(
+          busy: false,
+          editorHasVectorLayer: true,
+          clearEditorBackgroundImageUrl: true,
+          pendingPencilKitData: payload.pencilKitBase64,
+        );
+        break;
+      case NoteDrawingKind.strokes:
+        _clearStrokeHistory();
+        for (final stroke in payload.strokes) {
+          _undoOps.add(_StrokeHistoryOp.add(stroke));
+        }
+        state = state.copyWith(
+          busy: false,
+          editorHasVectorLayer: true,
+          clearEditorBackgroundImageUrl: true,
+          strokes: payload.strokes,
+          redoStrokes: const <NoteStroke>[],
+          clearPendingPencilKitData: true,
+        );
+        break;
+      case NoteDrawingKind.remotePath:
+        state = state.copyWith(busy: false, editorHasVectorLayer: false);
+        break;
+    }
+  }
+
+  Future<NoteDrawingPayload?> _resolveDrawingPayload(String raw) async {
+    final initial = NoteDrawingCodec.parsePayload(raw);
+    if (initial == null) {
+      return null;
+    }
+    if (initial.kind != NoteDrawingKind.remotePath) {
+      return initial;
+    }
+    final path = initial.remotePath?.trim() ?? '';
+    if (path.isEmpty) {
+      return null;
+    }
+    try {
+      final url = MediaUrl.resolve(path);
+      final bytes = await _repository.downloadBytes(url);
+      return NoteDrawingCodec.parseFileBody(bytes);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void clearPendingPencilKitData() {
+    if (state.pendingPencilKitData == null) {
+      return;
+    }
+    state = state.copyWith(clearPendingPencilKitData: true);
   }
 
   void updateDraftTitle(String title) {
     state = state.copyWith(draftTitle: title);
   }
 
+  void setToolMode(NoteToolMode mode) {
+    if (mode == state.toolMode) {
+      return;
+    }
+    state = state.copyWith(toolMode: mode);
+  }
+
   void setSelectedColor(Color color) {
-    state = state.copyWith(selectedColor: color);
+    state = state.copyWith(
+      selectedColor: color,
+      toolMode: NoteToolMode.pen,
+    );
   }
 
   void setStrokeWidth(double width) {
@@ -283,35 +378,166 @@ class MyNotesController extends StateNotifier<MyNotesState> {
     if (points.length < 2) {
       return;
     }
+    if (state.toolMode == NoteToolMode.eraser) {
+      _eraseStrokesAlong(points);
+      return;
+    }
+    final stroke = NoteStroke(
+      color: state.selectedColor,
+      width: state.strokeWidth,
+      points: points,
+    );
+    _redoOps.clear();
+    _undoOps.add(_StrokeHistoryOp.add(stroke));
     state = state.copyWith(
-      strokes: <NoteStroke>[
-        ...state.strokes,
-        NoteStroke(
-          color: state.selectedColor,
-          width: state.strokeWidth,
-          points: points,
-        ),
-      ],
+      strokes: <NoteStroke>[...state.strokes, stroke],
+      redoStrokes: const <NoteStroke>[],
     );
   }
 
-  void undoStroke() {
+  void _eraseStrokesAlong(List<Offset> eraserPoints) {
     if (state.strokes.isEmpty) {
       return;
     }
+    final threshold = math.max(12.0, state.strokeWidth);
+    final kept = <NoteStroke>[];
+    final removed = <NoteStroke>[];
+    for (final stroke in state.strokes) {
+      if (_strokeHitsEraser(stroke, eraserPoints, threshold)) {
+        removed.add(stroke);
+      } else {
+        kept.add(stroke);
+      }
+    }
+    if (removed.isEmpty) {
+      return;
+    }
+    _redoOps.clear();
+    _undoOps.add(_StrokeHistoryOp.erase(removed));
     state = state.copyWith(
-      strokes: state.strokes.sublist(0, state.strokes.length - 1),
+      strokes: kept,
+      redoStrokes: const <NoteStroke>[],
     );
+  }
+
+  bool _strokeHitsEraser(
+    NoteStroke stroke,
+    List<Offset> eraserPoints,
+    double threshold,
+  ) {
+    final hitRadius = threshold + stroke.width * 0.5;
+    for (final eraser in eraserPoints) {
+      for (var i = 0; i < stroke.points.length; i++) {
+        if ((stroke.points[i] - eraser).distance <= hitRadius) {
+          return true;
+        }
+        if (i > 0 &&
+            _distanceToSegment(
+                  eraser,
+                  stroke.points[i - 1],
+                  stroke.points[i],
+                ) <=
+                hitRadius) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  double _distanceToSegment(Offset p, Offset a, Offset b) {
+    final ab = b - a;
+    final length2 = ab.dx * ab.dx + ab.dy * ab.dy;
+    if (length2 <= 0.0001) {
+      return (p - a).distance;
+    }
+    final t = (((p.dx - a.dx) * ab.dx + (p.dy - a.dy) * ab.dy) / length2)
+        .clamp(0.0, 1.0);
+    final projection = Offset(a.dx + ab.dx * t, a.dy + ab.dy * t);
+    return (p - projection).distance;
+  }
+
+  bool get canUndoFlutter => _undoOps.isNotEmpty;
+
+  bool get canRedoFlutter => _redoOps.isNotEmpty;
+
+  void undoStroke() {
+    if (_undoOps.isEmpty) {
+      return;
+    }
+    final op = _undoOps.removeLast();
+    _redoOps.add(op);
+    switch (op.kind) {
+      case _StrokeHistoryKind.add:
+        final next = <NoteStroke>[...state.strokes];
+        if (next.isNotEmpty) {
+          next.removeLast();
+        }
+        state = state.copyWith(
+          strokes: next,
+          redoStrokes: _redoOps
+              .where((item) => item.kind == _StrokeHistoryKind.add)
+              .map((item) => item.stroke!)
+              .toList(),
+        );
+        break;
+      case _StrokeHistoryKind.erase:
+        state = state.copyWith(
+          strokes: <NoteStroke>[...state.strokes, ...op.removed],
+          redoStrokes: const <NoteStroke>[],
+        );
+        break;
+    }
+  }
+
+  void redoStroke() {
+    if (_redoOps.isEmpty) {
+      return;
+    }
+    final op = _redoOps.removeLast();
+    _undoOps.add(op);
+    switch (op.kind) {
+      case _StrokeHistoryKind.add:
+        state = state.copyWith(
+          strokes: <NoteStroke>[...state.strokes, op.stroke!],
+          redoStrokes: const <NoteStroke>[],
+        );
+        break;
+      case _StrokeHistoryKind.erase:
+        final removeSet = op.removed.toSet();
+        state = state.copyWith(
+          strokes: state.strokes
+              .where((stroke) => !removeSet.contains(stroke))
+              .toList(),
+          redoStrokes: const <NoteStroke>[],
+        );
+        break;
+    }
   }
 
   void clearCanvas() {
-    if (state.strokes.isEmpty) {
+    if (state.strokes.isEmpty && _undoOps.isEmpty) {
       return;
     }
-    state = state.copyWith(strokes: const <NoteStroke>[]);
+    _clearStrokeHistory();
+    state = state.copyWith(
+      strokes: const <NoteStroke>[],
+      redoStrokes: const <NoteStroke>[],
+    );
   }
 
-  Future<String?> saveCurrentNote(Uint8List bytes) async {
+  void _clearStrokeHistory() {
+    _undoOps.clear();
+    _redoOps.clear();
+  }
+
+  /// [pngBytes] 预览图；[drawingExport] 为矢量正文（pk base64 或 strokes JSON，
+  /// 不含前缀时由 [drawingKind] 指定）。
+  Future<String?> saveCurrentNote({
+    required Uint8List pngBytes,
+    String? drawingExport,
+    NoteDrawingKind? drawingKind,
+  }) async {
     final categoryId = _writeCategoryId;
     if (categoryId <= 0) {
       return '请先新增笔记分类';
@@ -319,7 +545,7 @@ class MyNotesController extends StateNotifier<MyNotesState> {
 
     state = state.copyWith(busy: true, clearError: true);
     final uploadResponse = await _repository.uploadNoteImage(
-      bytes: bytes,
+      bytes: pngBytes,
       filename: 'note_${DateTime.now().millisecondsSinceEpoch}.png',
     );
     if (!uploadResponse.isSuccess) {
@@ -327,13 +553,16 @@ class MyNotesController extends StateNotifier<MyNotesState> {
       return uploadResponse.displayMsg;
     }
 
-    // 上传成功后保存的是相对 `path`（例如 `app/upload/.../xxx.png`），后端
-    // 持久化 path，读取时再拼装为可访问地址。
     final imagePath = parseUploadResult(uploadResponse.data).savable;
     if (imagePath.isEmpty) {
       state = state.copyWith(busy: false);
       return uploadResponse.displayMsg;
     }
+
+    final param2 = await _encodeParam2(
+      drawingExport: drawingExport,
+      drawingKind: drawingKind,
+    );
 
     final title = state.draftTitle.trim().isEmpty
         ? '笔记名称'
@@ -346,12 +575,14 @@ class MyNotesController extends StateNotifier<MyNotesState> {
             paperType: state.paperType.value,
             title: title,
             imageUrl: imagePath,
+            param2: param2,
           )
         : await _repository.saveNote(
             categoryId: categoryId,
             paperType: state.paperType.value,
             title: title,
             imageUrl: imagePath,
+            param2: param2,
           );
     if (!saveResponse.isSuccess) {
       state = state.copyWith(busy: false);
@@ -359,11 +590,60 @@ class MyNotesController extends StateNotifier<MyNotesState> {
     }
 
     state = state.copyWith(busy: false);
-    // 走完整 refresh 而不是 selectCategory：后者只会重拉当前分类的笔记
-    // 列表，不会刷新左侧分类的 count；新建/更新笔记后必须把 sidebar 的
-    //「（数字）」一同同步，否则会一直停留在旧值。
     await refresh();
     return null;
+  }
+
+  Future<String> _encodeParam2({
+    required String? drawingExport,
+    required NoteDrawingKind? drawingKind,
+  }) async {
+    final kind = drawingKind ?? NoteDrawingKind.strokes;
+    var body = drawingExport?.trim() ?? '';
+    if (body.isEmpty) {
+      if (kind == NoteDrawingKind.strokes && state.strokes.isNotEmpty) {
+        body = NoteDrawingCodec.encodeStrokesJson(state.strokes);
+      } else {
+        return 'string';
+      }
+    }
+
+    final resolvedInline = switch (kind) {
+      NoteDrawingKind.pencilKit => NoteDrawingCodec.encodePkInline(
+          body.startsWith(NoteDrawingCodec.pkPrefix)
+              ? body.substring(NoteDrawingCodec.pkPrefix.length)
+              : body,
+        ),
+      NoteDrawingKind.strokes => () {
+          if (body.startsWith(NoteDrawingCodec.strokesPrefix) ||
+              body.startsWith('[')) {
+            final jsonText = body.startsWith(NoteDrawingCodec.strokesPrefix)
+                ? body.substring(NoteDrawingCodec.strokesPrefix.length)
+                : body;
+            return '${NoteDrawingCodec.strokesPrefix}$jsonText';
+          }
+          return NoteDrawingCodec.encodeStrokesInline(state.strokes);
+        }(),
+      NoteDrawingKind.remotePath => body,
+    };
+
+    if (resolvedInline.length <= NoteDrawingCodec.inlineMaxChars) {
+      return resolvedInline;
+    }
+
+    final filename = kind == NoteDrawingKind.pencilKit
+        ? 'note_draw_${DateTime.now().millisecondsSinceEpoch}.pk.txt'
+        : 'note_draw_${DateTime.now().millisecondsSinceEpoch}.json.txt';
+    final upload = await _repository.uploadNoteImage(
+      bytes: Uint8List.fromList(utf8.encode(resolvedInline)),
+      filename: filename,
+    );
+    if (!upload.isSuccess) {
+      // 上传失败时仍尽量内联（可能被后端截断，但优于丢失）。
+      return resolvedInline;
+    }
+    final path = parseUploadResult(upload.data).savable;
+    return path.isEmpty ? resolvedInline : path;
   }
 
   int get _writeCategoryId {
@@ -374,18 +654,6 @@ class MyNotesController extends StateNotifier<MyNotesState> {
     return fallback?.id ?? 0;
   }
 
-  /// Parse the categories list returned by `/app/user/noteCategoryList`.
-  ///
-  /// 接口实际返回示例：
-  /// ```json
-  /// {
-  ///   "id": "4259", "name": "D",
-  ///   "createTime": "2026-05-01 00:14:37",
-  ///   "userId": "...", "count": "0"
-  /// }
-  /// ```
-  /// `count` 是后端为该分类下笔记数预先聚合好的字符串，左侧导航的
-  /// 「（数字）」直接读取它，无需前端再算。
   List<NoteCategoryItem> _parseCategories(dynamic data) {
     final result = <NoteCategoryItem>[];
     if (data is! List) {
@@ -395,7 +663,6 @@ class MyNotesController extends StateNotifier<MyNotesState> {
       if (raw is! Map) {
         continue;
       }
-      // 兼容 `Map<String, dynamic>` / `Map<dynamic, dynamic>`。
       final item = raw.map<String, dynamic>(
         (key, value) => MapEntry(key.toString(), value),
       );
@@ -431,20 +698,29 @@ class MyNotesController extends StateNotifier<MyNotesState> {
     }
     final result = <NoteEntry>[];
     for (final item in data) {
-      if (item is! Map<String, dynamic>) {
+      if (item is! Map) {
         continue;
       }
+      final map = item is Map<String, dynamic>
+          ? item
+          : item.map<String, dynamic>(
+              (key, value) => MapEntry(key.toString(), value),
+            );
+      final drawingRaw = map['param2']?.toString() ?? '';
       result.add(
         NoteEntry(
-          id: _toInt(item['id']),
-          categoryId: _toInt(item['categoryId']),
-          title: item['title']?.toString().trim().isNotEmpty == true
-              ? item['title'].toString().trim()
+          id: _toInt(map['id']),
+          categoryId: _toInt(map['categoryId']),
+          title: map['title']?.toString().trim().isNotEmpty == true
+              ? map['title'].toString().trim()
               : '未命名笔记',
-          imageUrl: item['param1']?.toString() ?? '',
-          createdAt: _parseDate(item['createTime']),
-          paperType: NotePaperType.fromValue(item['paperType']),
-          isFavorite: _toBool(item['favorite']) || _toBool(item['isFavorite']),
+          imageUrl: map['param1']?.toString() ?? '',
+          drawingData: NoteDrawingCodec.isPlaceholder(drawingRaw)
+              ? ''
+              : drawingRaw,
+          createdAt: _parseDate(map['createTime']),
+          paperType: NotePaperType.fromValue(map['paperType']),
+          isFavorite: _toBool(map['favorite']) || _toBool(map['isFavorite']),
         ),
       );
     }
@@ -474,7 +750,22 @@ class MyNotesController extends StateNotifier<MyNotesState> {
     final text = value?.toString().toLowerCase() ?? '';
     return text == 'true' || text == '1';
   }
+}
 
+enum _StrokeHistoryKind { add, erase }
+
+class _StrokeHistoryOp {
+  const _StrokeHistoryOp.add(this.stroke)
+      : kind = _StrokeHistoryKind.add,
+        removed = const <NoteStroke>[];
+
+  const _StrokeHistoryOp.erase(this.removed)
+      : kind = _StrokeHistoryKind.erase,
+        stroke = null;
+
+  final _StrokeHistoryKind kind;
+  final NoteStroke? stroke;
+  final List<NoteStroke> removed;
 }
 
 extension _FirstOrNull<T> on Iterable<T> {

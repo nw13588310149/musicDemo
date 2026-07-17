@@ -1,8 +1,7 @@
-import 'dart:ui' as ui;
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_assets.dart';
@@ -13,7 +12,9 @@ import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/my_notes_controller.dart';
 import '../state/my_notes_state.dart';
+import '../state/note_drawing_codec.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
+import 'note_drawing_surface.dart';
 
 class MyNotesPage extends ConsumerStatefulWidget {
   const MyNotesPage({super.key});
@@ -23,12 +24,16 @@ class MyNotesPage extends ConsumerStatefulWidget {
 }
 
 class _MyNotesPageState extends ConsumerState<MyNotesPage> {
-  final GlobalKey _canvasBoundaryKey = GlobalKey();
+  final GlobalKey<NoteDrawingSurfaceState> _drawingSurfaceKey =
+      GlobalKey<NoteDrawingSurfaceState>();
   List<Offset> _activeStroke = const <Offset>[];
+  bool _iosCanUndo = false;
+  bool _iosCanRedo = false;
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(myNotesControllerProvider);
+    final controller = ref.read(myNotesControllerProvider.notifier);
     return switch (state.view) {
       MyNotesView.list => _NotesListView(
         state: state,
@@ -36,6 +41,7 @@ class _MyNotesPageState extends ConsumerState<MyNotesPage> {
         onAddCategory: _showAddCategoryDialog,
         onCategoryAction: _handleCategoryAction,
         onNoteAction: _handleNoteAction,
+        onOpenNote: _openExistingNote,
       ),
       MyNotesView.template => _NoteTemplateView(
         selectedType: state.paperType,
@@ -45,26 +51,48 @@ class _MyNotesPageState extends ConsumerState<MyNotesPage> {
         },
       ),
       MyNotesView.editor => _NoteEditorView(
-        boundaryKey: _canvasBoundaryKey,
+        drawingSurfaceKey: _drawingSurfaceKey,
         state: state,
         activeStroke: _activeStroke,
+        canUndo: noteDrawingUsesPencilKit
+            ? _iosCanUndo
+            : controller.canUndoFlutter,
+        canRedo: noteDrawingUsesPencilKit
+            ? _iosCanRedo
+            : controller.canRedoFlutter,
         onBack: _backToList,
+        onEditTitle: _editDraftTitle,
         onColorSelected: (color) {
           ref.read(myNotesControllerProvider.notifier).setSelectedColor(color);
         },
         onStrokeWidthChanged: (value) {
           ref.read(myNotesControllerProvider.notifier).setStrokeWidth(value);
         },
-        onUndo: () {
-          ref.read(myNotesControllerProvider.notifier).undoStroke();
+        onToolModeSelected: (mode) {
+          ref.read(myNotesControllerProvider.notifier).setToolMode(mode);
         },
-        onClear: () {
-          ref.read(myNotesControllerProvider.notifier).clearCanvas();
-        },
+        onUndo: _handleUndo,
+        onRedo: _handleRedo,
+        onClear: _handleClear,
         onPanStart: _handlePanStart,
         onPanUpdate: _handlePanUpdate,
         onPanEnd: _handlePanEnd,
         onPanCancel: _handlePanCancel,
+        onHistoryChanged: (history) {
+          if (_iosCanUndo == history.canUndo &&
+              _iosCanRedo == history.canRedo) {
+            return;
+          }
+          setState(() {
+            _iosCanUndo = history.canUndo;
+            _iosCanRedo = history.canRedo;
+          });
+        },
+        onPendingPencilKitConsumed: () {
+          ref
+              .read(myNotesControllerProvider.notifier)
+              .clearPendingPencilKitData();
+        },
         onSave: _saveEditorImage,
       ),
     };
@@ -99,8 +127,38 @@ class _MyNotesPageState extends ConsumerState<MyNotesPage> {
   }
 
   void _backToList() {
-    setState(() => _activeStroke = const <Offset>[]);
+    setState(() {
+      _activeStroke = const <Offset>[];
+      _iosCanUndo = false;
+      _iosCanRedo = false;
+    });
     ref.read(myNotesControllerProvider.notifier).backToList();
+  }
+
+  void _openExistingNote(NoteEntry note) {
+    setState(() {
+      _iosCanUndo = false;
+      _iosCanRedo = false;
+    });
+    unawaited(
+      ref.read(myNotesControllerProvider.notifier).openExistingNote(note),
+    );
+  }
+
+  Future<void> _editDraftTitle() async {
+    final current = ref.read(myNotesControllerProvider).draftTitle;
+    final next = await showTextInputDialog(
+      context: context,
+      title: '编辑标题',
+      hintText: '请输入笔记标题',
+      initialValue: current,
+      confirmLabel: '确定',
+      maxLength: 30,
+    );
+    if (!mounted || next == null || next.isEmpty || next == current) {
+      return;
+    }
+    ref.read(myNotesControllerProvider.notifier).updateDraftTitle(next);
   }
 
   Future<void> _showAddCategoryDialog() async {
@@ -202,25 +260,34 @@ class _MyNotesPageState extends ConsumerState<MyNotesPage> {
   }
 
   void _handlePanStart(DragStartDetails details) {
+    if (noteDrawingUsesPencilKit) {
+      return;
+    }
     setState(() => _activeStroke = <Offset>[details.localPosition]);
   }
 
   void _handlePanUpdate(DragUpdateDetails details) {
+    if (noteDrawingUsesPencilKit) {
+      return;
+    }
     setState(() {
       _activeStroke = <Offset>[..._activeStroke, details.localPosition];
     });
   }
 
   void _handlePanEnd(DragEndDetails details) {
+    if (noteDrawingUsesPencilKit) {
+      return;
+    }
     if (_activeStroke.length >= 2) {
       ref.read(myNotesControllerProvider.notifier).addStroke(_activeStroke);
     }
     setState(() => _activeStroke = const <Offset>[]);
   }
 
-  /// 多指落下时（≥2 根手指）由 [_NoteEditorView] 主动调用：丢弃此前
+  /// 多指落下时（≥2 根手指）由画布层主动调用：丢弃此前
   /// 单指开启的半截笔画，把绘制权让给 [InteractiveViewer] 的缩放手势，
-  /// 避免 iPad 上"两指捏合 = 顺手画一道"。
+  /// 避免 Android 平板上"两指捏合 = 顺手画一道"。
   void _handlePanCancel() {
     if (_activeStroke.isEmpty) {
       return;
@@ -228,36 +295,74 @@ class _MyNotesPageState extends ConsumerState<MyNotesPage> {
     setState(() => _activeStroke = const <Offset>[]);
   }
 
+  Future<void> _handleUndo() async {
+    if (noteDrawingUsesPencilKit) {
+      await _drawingSurfaceKey.currentState?.undo();
+      return;
+    }
+    ref.read(myNotesControllerProvider.notifier).undoStroke();
+  }
+
+  Future<void> _handleRedo() async {
+    if (noteDrawingUsesPencilKit) {
+      await _drawingSurfaceKey.currentState?.redo();
+      return;
+    }
+    ref.read(myNotesControllerProvider.notifier).redoStroke();
+  }
+
+  Future<void> _handleClear() async {
+    if (noteDrawingUsesPencilKit) {
+      await _drawingSurfaceKey.currentState?.clear();
+      setState(() {
+        _iosCanUndo = false;
+        _iosCanRedo = false;
+      });
+      return;
+    }
+    ref.read(myNotesControllerProvider.notifier).clearCanvas();
+  }
+
   Future<void> _saveEditorImage() async {
     try {
-      final boundary =
-          _canvasBoundaryKey.currentContext?.findRenderObject()
-              as RenderRepaintBoundary?;
-      if (boundary == null) {
+      final surface = _drawingSurfaceKey.currentState;
+      final bytes = await surface?.capturePng(pixelRatio: 2.2);
+      if (bytes == null || bytes.isEmpty) {
         _showMessage('画布还未准备好，请稍后重试');
         return;
       }
-      await WidgetsBinding.instance.endOfFrame;
-      final image = await boundary.toImage(pixelRatio: 2.2);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) {
-        _showMessage('笔记导出失败，请稍后重试');
-        return;
+
+      String? drawingExport;
+      NoteDrawingKind? drawingKind;
+      if (noteDrawingUsesPencilKit) {
+        drawingExport = await surface?.exportPencilKitData();
+        drawingKind = NoteDrawingKind.pencilKit;
+      } else {
+        final strokes = ref.read(myNotesControllerProvider).strokes;
+        if (strokes.isNotEmpty) {
+          drawingExport = NoteDrawingCodec.encodeStrokesJson(strokes);
+          drawingKind = NoteDrawingKind.strokes;
+        }
       }
-      final bytes = byteData.buffer.asUint8List();
+
       final message = await ref
           .read(myNotesControllerProvider.notifier)
-          .saveCurrentNote(bytes);
+          .saveCurrentNote(
+            pngBytes: bytes,
+            drawingExport: drawingExport,
+            drawingKind: drawingKind,
+          );
       if (message != null && message.isNotEmpty && mounted) {
         _showMessage(message);
         return;
       }
       if (mounted) {
         _showMessage('笔记已保存');
+        _backToList();
       }
     } catch (_) {
       if (mounted) {
-        return;
+        _showMessage('笔记导出失败，请稍后重试');
       }
     }
   }
@@ -274,6 +379,7 @@ class _NotesListView extends ConsumerWidget {
     required this.onAddCategory,
     required this.onCategoryAction,
     required this.onNoteAction,
+    required this.onOpenNote,
   });
 
   final MyNotesState state;
@@ -283,6 +389,7 @@ class _NotesListView extends ConsumerWidget {
   onCategoryAction;
   final Future<void> Function(NoteEntry item, _NoteMenuAction action)
   onNoteAction;
+  final ValueChanged<NoteEntry> onOpenNote;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -329,7 +436,7 @@ class _NotesListView extends ConsumerWidget {
                 child: _NotesContentArea(
                   state: state,
                   onSelectFilter: controller.selectFilter,
-                  onOpenNote: controller.openExistingNote,
+                  onOpenNote: onOpenNote,
                   onCreate: onCreate,
                   onNoteAction: onNoteAction,
                 ),
@@ -1020,7 +1127,7 @@ class _TemplatePreviewCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(ui(12)),
                   child: CustomPaint(
                     size: Size.infinite,
-                    painter: _NotePaperPainter(type: type),
+                    painter: NotePaperPainter(type: type),
                   ),
                 ),
               ),
@@ -1032,111 +1139,58 @@ class _TemplatePreviewCard extends StatelessWidget {
   }
 }
 
-class _NoteEditorView extends StatefulWidget {
+class _NoteEditorView extends StatelessWidget {
   const _NoteEditorView({
-    required this.boundaryKey,
+    required this.drawingSurfaceKey,
     required this.state,
     required this.activeStroke,
+    required this.canUndo,
+    required this.canRedo,
     required this.onBack,
+    required this.onEditTitle,
     required this.onColorSelected,
     required this.onStrokeWidthChanged,
+    required this.onToolModeSelected,
     required this.onUndo,
+    required this.onRedo,
     required this.onClear,
     required this.onPanStart,
     required this.onPanUpdate,
     required this.onPanEnd,
     required this.onPanCancel,
+    required this.onHistoryChanged,
+    required this.onPendingPencilKitConsumed,
     required this.onSave,
   });
 
-  final GlobalKey boundaryKey;
+  final GlobalKey<NoteDrawingSurfaceState> drawingSurfaceKey;
   final MyNotesState state;
   final List<Offset> activeStroke;
+  final bool canUndo;
+  final bool canRedo;
   final VoidCallback onBack;
+  final Future<void> Function() onEditTitle;
   final ValueChanged<Color> onColorSelected;
   final ValueChanged<double> onStrokeWidthChanged;
-  final VoidCallback onUndo;
-  final VoidCallback onClear;
+  final ValueChanged<NoteToolMode> onToolModeSelected;
+  final Future<void> Function() onUndo;
+  final Future<void> Function() onRedo;
+  final Future<void> Function() onClear;
   final GestureDragStartCallback onPanStart;
   final GestureDragUpdateCallback onPanUpdate;
   final GestureDragEndCallback onPanEnd;
-
-  /// 多指落下时由 [_NoteEditorViewState] 主动调用：让父级丢弃半截笔画，
-  /// 把绘制权让给 [InteractiveViewer] 接管的缩放手势。
   final VoidCallback onPanCancel;
+  final ValueChanged<NoteDrawingHistory> onHistoryChanged;
+  final VoidCallback onPendingPencilKitConsumed;
   final Future<void> Function() onSave;
-
-  @override
-  State<_NoteEditorView> createState() => _NoteEditorViewState();
-}
-
-class _NoteEditorViewState extends State<_NoteEditorView> {
-  /// 当前在画布命中区域内按下的指针数。等于 1 时按"绘制"处理；≥ 2 时
-  /// 主动废弃笔画并把 2 指捏合 / 平移交给 [InteractiveViewer]。
-  int _pointerCount = 0;
-
-  /// 缩放视图自带的状态控制器。仅用来在面板里读取/重置 transform，
-  /// 后续如果想加"恢复 100%"按钮直接 `.reset()` 即可。
-  late final TransformationController _viewerController =
-      TransformationController();
-
-  @override
-  void dispose() {
-    _viewerController.dispose();
-    super.dispose();
-  }
-
-  void _onPointerDown(PointerDownEvent event) {
-    _pointerCount += 1;
-    if (_pointerCount >= 2) {
-      // 第二根手指落下：立刻让父级清掉单指刚刚记录到一半的笔画——
-      // [GestureDetector] 自身的 pan 会在 [InteractiveViewer] 的 scale
-      // 赢下手势竞技场后被 cancel（不会再发 onPanEnd），不在这里清就会
-      // 留下一个半截 stroke。
-      widget.onPanCancel();
-    }
-  }
-
-  void _onPointerUp(PointerUpEvent event) {
-    if (_pointerCount > 0) {
-      _pointerCount -= 1;
-    }
-  }
-
-  void _onPointerCancel(PointerCancelEvent event) {
-    if (_pointerCount > 0) {
-      _pointerCount -= 1;
-    }
-  }
-
-  /// 单指态才转发给父级；多指态直接吞掉，避免在 InteractiveViewer 还没
-  /// 抢下手势之前的过渡帧里继续往笔画里塞点。
-  void _handlePanStart(DragStartDetails details) {
-    if (_pointerCount >= 2) {
-      return;
-    }
-    widget.onPanStart(details);
-  }
-
-  void _handlePanUpdate(DragUpdateDetails details) {
-    if (_pointerCount >= 2) {
-      return;
-    }
-    widget.onPanUpdate(details);
-  }
-
-  void _handlePanEnd(DragEndDetails details) {
-    if (_pointerCount >= 2) {
-      return;
-    }
-    widget.onPanEnd(details);
-  }
 
   @override
   Widget build(BuildContext context) {
     final scale = DashboardScaleScope.of(context);
     final ui = scale.ui;
-    final state = widget.state;
+    final state = this.state;
+    final penActive = state.toolMode == NoteToolMode.pen;
+    final eraserActive = state.toolMode == NoteToolMode.eraser;
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1151,15 +1205,35 @@ class _NoteEditorViewState extends State<_NoteEditorView> {
               children: [
                 _RoundIconButton(
                   icon: Icons.arrow_back_rounded,
-                  onTap: widget.onBack,
+                  onTap: onBack,
                 ),
                 const Spacer(),
-                Text(
-                  state.draftTitle,
-                  style: TextStyle(
-                    fontSize: ui(20),
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF16141F),
+                Flexible(
+                  child: GestureDetector(
+                    onTap: () => onEditTitle(),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            state.draftTitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: ui(20),
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF16141F),
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: ui(6)),
+                        Icon(
+                          Icons.edit_outlined,
+                          size: ui(18),
+                          color: const Color(0xFF8B879A),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const Spacer(),
@@ -1167,7 +1241,7 @@ class _NoteEditorViewState extends State<_NoteEditorView> {
                   label: '保存',
                   icon: Icons.save_outlined,
                   busy: state.busy,
-                  onPressed: state.busy ? null : widget.onSave,
+                  onPressed: state.busy ? null : onSave,
                 ),
               ],
             ),
@@ -1177,70 +1251,26 @@ class _NoteEditorViewState extends State<_NoteEditorView> {
             child: Stack(
               children: [
                 Positioned.fill(
-                  // Listener 负责"指头数量统计"，InteractiveViewer 负责
-                  // "≥2 指捏合时的缩放/平移"。两层都包在 RepaintBoundary 外面：
-                  //   - InteractiveViewer 只是给 child 套了一层 Transform，
-                  //     缩放发生时 RepaintBoundary 内部的渲染坐标系不变，
-                  //     `boundary.toImage()` 仍然能拿到"未缩放"的整张画布，
-                  //     不会因为用户当前正放大着就只导出可见部分。
-                  //   - Listener 在最外层，能可靠收到用户所有指头的按下/抬起，
-                  //     不受 InteractiveViewer 内部手势竞技场的影响。
-                  child: Listener(
-                    onPointerDown: _onPointerDown,
-                    onPointerUp: _onPointerUp,
-                    onPointerCancel: _onPointerCancel,
-                    child: InteractiveViewer(
-                      transformationController: _viewerController,
-                      // 单指拖动是"绘画"，绝不能被 InteractiveViewer 当成
-                      // 平移；2 指捏合走 scale 分支，scaleEnabled = true 即可。
-                      panEnabled: false,
-                      scaleEnabled: true,
-                      minScale: 1.0,
-                      maxScale: 4.0,
-                      child: RepaintBoundary(
-                        key: widget.boundaryKey,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(ui(18)),
-                          child: DecoratedBox(
-                            decoration: const BoxDecoration(
-                              color: Colors.white,
-                            ),
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                CustomPaint(
-                                  painter: _NotePaperPainter(
-                                    type: state.paperType,
-                                  ),
-                                ),
-                                _buildOptionalRemoteImage(
-                                  state.editorBackgroundImageUrl,
-                                  fit: BoxFit.cover,
-                                ),
-                                GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  // 这三个回调里都先做 _pointerCount 检查，
-                                  // 多指态下直接吞掉，避免 scale 还没赢之前的
-                                  // 过渡帧里继续往笔画里塞点。
-                                  onPanStart: _handlePanStart,
-                                  onPanUpdate: _handlePanUpdate,
-                                  onPanEnd: _handlePanEnd,
-                                  child: CustomPaint(
-                                    painter: _StrokePainter(
-                                      strokes: state.strokes,
-                                      activeStroke: widget.activeStroke,
-                                      activeColor: state.selectedColor,
-                                      activeWidth: state.strokeWidth,
-                                    ),
-                                    child: const SizedBox.expand(),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
+                  child: NoteDrawingSurface(
+                    key: drawingSurfaceKey,
+                    paperType: state.paperType,
+                    backgroundImage: _buildOptionalRemoteImage(
+                      state.editorBackgroundImageUrl,
+                      fit: BoxFit.cover,
                     ),
+                    strokeColor: state.selectedColor,
+                    strokeWidth: state.strokeWidth,
+                    toolMode: state.toolMode,
+                    strokes: state.strokes,
+                    activeStroke: activeStroke,
+                    pendingPencilKitData: state.pendingPencilKitData,
+                    onPendingPencilKitConsumed: onPendingPencilKitConsumed,
+                    onPanStart: onPanStart,
+                    onPanUpdate: onPanUpdate,
+                    onPanEnd: onPanEnd,
+                    onPanCancel: onPanCancel,
+                    onHistoryChanged: onHistoryChanged,
+                    borderRadius: ui(18),
                   ),
                 ),
                 Positioned(
@@ -1250,7 +1280,7 @@ class _NoteEditorViewState extends State<_NoteEditorView> {
                   child: Center(
                     child: Container(
                       padding: EdgeInsets.symmetric(
-                        horizontal: ui(16),
+                        horizontal: ui(12),
                         vertical: ui(10),
                       ),
                       decoration: BoxDecoration(
@@ -1264,86 +1294,112 @@ class _NoteEditorViewState extends State<_NoteEditorView> {
                           ),
                         ],
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            onPressed: state.strokes.isEmpty
-                                ? null
-                                : widget.onUndo,
-                            icon: const Icon(Icons.undo_rounded),
-                          ),
-                          Container(
-                            width: 1,
-                            height: ui(22),
-                            color: const Color(0xFFEAEAF2),
-                          ),
-                          SizedBox(width: ui(12)),
-                          ..._editorColors.map((color) {
-                            final active = color == state.selectedColor;
-                            return GestureDetector(
-                              onTap: () => widget.onColorSelected(color),
-                              child: Container(
-                                width: ui(22),
-                                height: ui(22),
-                                margin: EdgeInsets.only(right: ui(10)),
-                                decoration: BoxDecoration(
-                                  color: color,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: active
-                                        ? const Color(0xFF16141F)
-                                        : Colors.white,
-                                    width: active ? 2 : 1,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              onPressed: canUndo ? () => onUndo() : null,
+                              icon: const Icon(Icons.undo_rounded),
+                              tooltip: '撤销',
+                            ),
+                            IconButton(
+                              onPressed: canRedo ? () => onRedo() : null,
+                              icon: const Icon(Icons.redo_rounded),
+                              tooltip: '重做',
+                            ),
+                            Container(
+                              width: 1,
+                              height: ui(22),
+                              color: const Color(0xFFEAEAF2),
+                            ),
+                            SizedBox(width: ui(4)),
+                            _ToolToggleButton(
+                              icon: Icons.edit_rounded,
+                              active: penActive,
+                              onTap: () => onToolModeSelected(NoteToolMode.pen),
+                            ),
+                            _ToolToggleButton(
+                              icon: Icons.auto_fix_off_outlined,
+                              active: eraserActive,
+                              onTap: () =>
+                                  onToolModeSelected(NoteToolMode.eraser),
+                            ),
+                            SizedBox(width: ui(8)),
+                            Container(
+                              width: 1,
+                              height: ui(22),
+                              color: const Color(0xFFEAEAF2),
+                            ),
+                            SizedBox(width: ui(10)),
+                            ..._editorColors.map((color) {
+                              final active = color == state.selectedColor &&
+                                  penActive;
+                              return GestureDetector(
+                                onTap: () => onColorSelected(color),
+                                child: Container(
+                                  width: ui(22),
+                                  height: ui(22),
+                                  margin: EdgeInsets.only(right: ui(10)),
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: active
+                                          ? const Color(0xFF16141F)
+                                          : Colors.white,
+                                      width: active ? 2 : 1,
+                                    ),
                                   ),
                                 ),
+                              );
+                            }),
+                            SizedBox(width: ui(4)),
+                            Container(
+                              width: ui(44),
+                              height: ui(34),
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF6F7FB),
+                                borderRadius: BorderRadius.circular(ui(10)),
                               ),
-                            );
-                          }),
-                          SizedBox(width: ui(4)),
-                          Container(
-                            width: ui(44),
-                            height: ui(34),
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF6F7FB),
-                              borderRadius: BorderRadius.circular(ui(10)),
-                            ),
-                            child: Text(
-                              '${state.strokeWidth.round()}',
-                              style: TextStyle(
-                                fontSize: ui(14),
-                                fontWeight: FontWeight.w600,
-                                color: const Color(0xFF2A2A2A),
+                              child: Text(
+                                '${state.strokeWidth.round()}',
+                                style: TextStyle(
+                                  fontSize: ui(14),
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF2A2A2A),
+                                ),
                               ),
                             ),
-                          ),
-                          SizedBox(
-                            width: ui(110),
-                            child: Slider(
-                              value: state.strokeWidth,
-                              min: 2,
-                              max: 32,
-                              activeColor: const Color(0xFF8B5CFF),
-                              inactiveColor: const Color(0xFFE8EAF4),
-                              onChanged: widget.onStrokeWidthChanged,
+                            SizedBox(
+                              width: ui(110),
+                              child: Slider(
+                                value: state.strokeWidth,
+                                min: 2,
+                                max: 32,
+                                activeColor: const Color(0xFF8B5CFF),
+                                inactiveColor: const Color(0xFFE8EAF4),
+                                onChanged: onStrokeWidthChanged,
+                              ),
                             ),
-                          ),
-                          Container(
-                            width: 1,
-                            height: ui(22),
-                            color: const Color(0xFFEAEAF2),
-                          ),
-                          SizedBox(width: ui(8)),
-                          TextButton.icon(
-                            onPressed: widget.onClear,
-                            icon: const Icon(Icons.auto_fix_off_outlined),
-                            label: const Text('清空画布'),
-                            style: TextButton.styleFrom(
-                              foregroundColor: const Color(0xFF1F1A32),
+                            Container(
+                              width: 1,
+                              height: ui(22),
+                              color: const Color(0xFFEAEAF2),
                             ),
-                          ),
-                        ],
+                            SizedBox(width: ui(8)),
+                            TextButton.icon(
+                              onPressed: () => onClear(),
+                              icon: const Icon(Icons.delete_outline_rounded),
+                              label: const Text('清空画布'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: const Color(0xFF1F1A32),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -1352,6 +1408,54 @@ class _NoteEditorViewState extends State<_NoteEditorView> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ToolToggleButton extends StatelessWidget {
+  const _ToolToggleButton({
+    required this.icon,
+    required this.active,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: ui(2)),
+      child: Material(
+        color: active ? const Color(0xFFF1ECFF) : Colors.transparent,
+        borderRadius: BorderRadius.circular(ui(10)),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(ui(10)),
+          child: Container(
+            width: ui(36),
+            height: ui(36),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(ui(10)),
+              border: Border.all(
+                color: active
+                    ? const Color(0xFF8B5CFF)
+                    : const Color(0xFFE7EAF4),
+              ),
+            ),
+            child: Icon(
+              icon,
+              size: ui(18),
+              color: active
+                  ? const Color(0xFF8B5CFF)
+                  : const Color(0xFF1F1A32),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1778,126 +1882,6 @@ class _SecondaryActionButton extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _StrokePainter extends CustomPainter {
-  const _StrokePainter({
-    required this.strokes,
-    required this.activeStroke,
-    required this.activeColor,
-    required this.activeWidth,
-  });
-
-  final List<NoteStroke> strokes;
-  final List<Offset> activeStroke;
-  final Color activeColor;
-  final double activeWidth;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    for (final stroke in strokes) {
-      _drawStroke(canvas, stroke.points, stroke.color, stroke.width);
-    }
-    if (activeStroke.length >= 2) {
-      _drawStroke(canvas, activeStroke, activeColor, activeWidth);
-    }
-  }
-
-  void _drawStroke(
-    Canvas canvas,
-    List<Offset> points,
-    Color color,
-    double width,
-  ) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = width
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke
-      ..isAntiAlias = true;
-    final path = Path()..moveTo(points.first.dx, points.first.dy);
-    for (var index = 1; index < points.length; index++) {
-      final previous = points[index - 1];
-      final current = points[index];
-      final midPoint = Offset(
-        (previous.dx + current.dx) / 2,
-        (previous.dy + current.dy) / 2,
-      );
-      path.quadraticBezierTo(
-        previous.dx,
-        previous.dy,
-        midPoint.dx,
-        midPoint.dy,
-      );
-    }
-    path.lineTo(points.last.dx, points.last.dy);
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _StrokePainter oldDelegate) {
-    return oldDelegate.strokes != strokes ||
-        oldDelegate.activeStroke != activeStroke ||
-        oldDelegate.activeColor != activeColor ||
-        oldDelegate.activeWidth != activeWidth;
-  }
-}
-
-class _NotePaperPainter extends CustomPainter {
-  const _NotePaperPainter({required this.type});
-
-  final NotePaperType type;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFFD6DCE9)
-      ..strokeWidth = 1;
-
-    switch (type) {
-      case NotePaperType.blank:
-        _drawDots(canvas, size, paint);
-        break;
-      case NotePaperType.notebook:
-        _drawNotebook(canvas, size, paint);
-        break;
-      case NotePaperType.staff:
-        _drawStaff(canvas, size, paint);
-        break;
-    }
-  }
-
-  void _drawDots(Canvas canvas, Size size, Paint paint) {
-    final dotPaint = Paint()..color = const Color(0xFFE9EDF7);
-    for (double y = 26; y < size.height; y += 28) {
-      for (double x = 20; x < size.width; x += 24) {
-        canvas.drawCircle(Offset(x, y), 1, dotPaint);
-      }
-    }
-  }
-
-  void _drawNotebook(Canvas canvas, Size size, Paint paint) {
-    for (double y = 42; y < size.height; y += 34) {
-      canvas.drawLine(Offset(24, y), Offset(size.width - 24, y), paint);
-    }
-  }
-
-  void _drawStaff(Canvas canvas, Size size, Paint paint) {
-    double startY = 36;
-    while (startY < size.height - 20) {
-      for (var i = 0; i < 5; i++) {
-        final y = startY + i * 9;
-        canvas.drawLine(Offset(20, y), Offset(size.width - 20, y), paint);
-      }
-      startY += 66;
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _NotePaperPainter oldDelegate) {
-    return oldDelegate.type != type;
   }
 }
 

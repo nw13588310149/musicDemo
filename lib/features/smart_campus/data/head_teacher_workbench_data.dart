@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/network/media_url.dart';
 import '../../../core/network/snowflake_id.dart';
 
 /// 班主任班级工作台 · 七日查寝每日正常人数。
@@ -21,6 +22,7 @@ class FocusStudentItem {
     required this.studentId,
     required this.studentName,
     required this.avatarChar,
+    this.studentHeadUrl,
     required this.classId,
     required this.className,
     required this.tag,
@@ -31,6 +33,7 @@ class FocusStudentItem {
   final String studentId;
   final String studentName;
   final String avatarChar;
+  final String? studentHeadUrl;
   final String classId;
   final String className;
   final String tag;
@@ -39,26 +42,32 @@ class FocusStudentItem {
 
   factory FocusStudentItem.fromJson(Map<String, dynamic> json) {
     final studentId =
-        pickFirstSnowflakeId(json, ['studentId', 'id', 'userId']) ?? '';
+        pickFirstSnowflakeId(json, ['studentId', 'userId']) ?? '';
     final name = _pickString(json, [
       'studentName',
       'realname',
+      'studentNickname',
       'name',
       'nickname',
     ]);
-    final avatarRaw = _pickString(json, [
-      'avatarChar',
-      'headChar',
-      'avatar',
+    final headUrlRaw = _pickString(json, [
+      'studentHeadUrl',
       'headUrl',
+      'avatarUrl',
+      'avatar',
+      'headImg',
     ]);
-    final avatarChar = avatarRaw.isNotEmpty
-        ? avatarRaw.characters.first
+    final studentHeadUrl =
+        headUrlRaw.isNotEmpty ? MediaUrl.resolve(headUrlRaw) : null;
+    final avatarCharRaw = _pickString(json, ['avatarChar', 'headChar']);
+    final avatarChar = avatarCharRaw.isNotEmpty
+        ? avatarCharRaw.characters.first
         : (name.isNotEmpty ? name.characters.first : '—');
     return FocusStudentItem(
       studentId: studentId,
       studentName: name.isNotEmpty ? name : '—',
       avatarChar: avatarChar,
+      studentHeadUrl: studentHeadUrl,
       classId: pickFirstSnowflakeId(json, ['classId']) ?? '',
       className: _pickString(json, ['className', 'class']),
       tag: _pickString(json, ['tag', 'focusTag', 'label']),

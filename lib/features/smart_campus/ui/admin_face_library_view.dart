@@ -1229,7 +1229,7 @@ class _Banner extends StatelessWidget {
                     ),
                     SizedBox(height: ui(2)),
                     Text(
-                      '掌握本班住宿生归宿与晨检结果，协同处理补卡与异常跟进。',
+                      '智慧校园人脸信息档案库，联动校园门禁安全通行管控。',
                       style: TextStyle(
                         fontSize: ui(12),
                         color: _kTextHint,

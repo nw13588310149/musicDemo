@@ -112,6 +112,10 @@ class MyNotesRepository {
     required int paperType,
     required String title,
     required String imageUrl,
+    String param2 = 'string',
+    String param3 = 'string',
+    String param4 = 'string',
+    String param5 = 'string',
   }) {
     return client.post(
       '/app/user/noteSave',
@@ -119,12 +123,16 @@ class MyNotesRepository {
         'categoryId': categoryId,
         'paperType': paperType,
         'param1': imageUrl,
-        'param2': 'string',
-        'param3': 'string',
-        'param4': 'string',
-        'param5': 'string',
+        'param2': param2,
+        'param3': param3,
+        'param4': param4,
+        'param5': param5,
         'title': title,
       },
     );
+  }
+
+  Future<Uint8List> downloadBytes(String url) {
+    return client.getBytes(url);
   }
 }

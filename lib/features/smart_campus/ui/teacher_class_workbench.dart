@@ -2729,6 +2729,7 @@ class _AttentionListCardState extends ConsumerState<_AttentionListCard> {
                       if (i > 0) SizedBox(height: ui(12)),
                       _PersonRowCard(
                         avatarSeed: displayItems[i].avatarChar,
+                        headUrl: displayItems[i].studentHeadUrl,
                         name: displayItems[i].studentName,
                         line2: displayItems[i].reason.isNotEmpty
                             ? displayItems[i].reason
@@ -5517,7 +5518,7 @@ class _StudentDetailPanelState extends ConsumerState<_StudentDetailPanel> {
                                 _DetailFieldRow(
                                   children: [
                                     _DetailField(
-                                      label: '监护人一：',
+                                      label: '监护人：',
                                       value: _detailField(
                                         'guardianName',
                                         _detailField('parentName', data.parentName),
