@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:pencil_kit/pencil_kit.dart';
 
 import '../state/my_notes_state.dart';
+import 'note_canvas_zoom.dart';
 
 /// iOS 使用系统 PencilKit；其它平台沿用 Flutter 自研笔迹。
 bool get noteDrawingUsesPencilKit =>
@@ -40,6 +41,7 @@ class NoteDrawingSurface extends StatefulWidget {
     required this.onPanEnd,
     required this.onPanCancel,
     required this.onHistoryChanged,
+    required this.onBackgroundZoomChanged,
     this.pendingPencilKitData,
     this.onPendingPencilKitConsumed,
     this.borderRadius = 18,
@@ -57,6 +59,7 @@ class NoteDrawingSurface extends StatefulWidget {
   final GestureDragEndCallback onPanEnd;
   final VoidCallback onPanCancel;
   final ValueChanged<NoteDrawingHistory> onHistoryChanged;
+  final ValueChanged<double> onBackgroundZoomChanged;
   final String? pendingPencilKitData;
   final VoidCallback? onPendingPencilKitConsumed;
   final double borderRadius;
@@ -73,13 +76,15 @@ class NoteDrawingSurfaceState extends State<NoteDrawingSurface> {
   bool _iosHasContent = false;
   bool _iosCanRedo = false;
   int _iosUndoDepth = 0;
+  static const double _minBackgroundZoom = 0.75;
+  static const double _maxBackgroundZoom = 2.5;
+  static const double _backgroundZoomStep = 0.25;
+  double _backgroundZoom = 1;
 
-  bool get canUndo => noteDrawingUsesPencilKit
-      ? _iosHasContent
-      : widget.strokes.isNotEmpty;
+  bool get canUndo =>
+      noteDrawingUsesPencilKit ? _iosHasContent : widget.strokes.isNotEmpty;
 
-  bool get canRedo =>
-      noteDrawingUsesPencilKit ? _iosCanRedo : false;
+  bool get canRedo => noteDrawingUsesPencilKit ? _iosCanRedo : false;
 
   @override
   void didUpdateWidget(covariant NoteDrawingSurface oldWidget) {
@@ -148,6 +153,26 @@ class NoteDrawingSurfaceState extends State<NoteDrawingSurface> {
     }
   }
 
+  double get backgroundZoom => _backgroundZoom;
+
+  void zoomBackgroundIn() =>
+      _setBackgroundZoom(_backgroundZoom + _backgroundZoomStep);
+
+  void zoomBackgroundOut() =>
+      _setBackgroundZoom(_backgroundZoom - _backgroundZoomStep);
+
+  void resetBackgroundZoom() => _setBackgroundZoom(1);
+
+  void _setBackgroundZoom(double value) {
+    final next = value.clamp(_minBackgroundZoom, _maxBackgroundZoom).toDouble();
+    if (next == _backgroundZoom) {
+      return;
+    }
+    setState(() => _backgroundZoom = next);
+    unawaited(NoteCanvasZoom.setZoom(next));
+    widget.onBackgroundZoomChanged(next);
+  }
+
   /// 导出 PencilKit base64（无前缀）；非 iOS 返回 null。
   Future<String?> exportPencilKitData() async {
     if (!noteDrawingUsesPencilKit) {
@@ -184,8 +209,9 @@ class NoteDrawingSurfaceState extends State<NoteDrawingSurface> {
   Future<Uint8List?> _captureFlutterBoundaryPng({
     required double pixelRatio,
   }) async {
-    final boundary = _flutterBoundaryKey.currentContext?.findRenderObject()
-        as RenderRepaintBoundary?;
+    final boundary =
+        _flutterBoundaryKey.currentContext?.findRenderObject()
+            as RenderRepaintBoundary?;
     if (boundary == null) {
       return null;
     }
@@ -233,12 +259,14 @@ class NoteDrawingSurfaceState extends State<NoteDrawingSurface> {
     return _compositePng(
       backgroundPng: bgBytes.buffer.asUint8List(),
       drawingPng: drawingBytes,
+      drawingScale: _backgroundZoom,
     );
   }
 
   Future<Uint8List?> _compositePng({
     required Uint8List backgroundPng,
     required Uint8List drawingPng,
+    required double drawingScale,
   }) async {
     final bgCodec = await ui.instantiateImageCodec(backgroundPng);
     final bgFrame = await bgCodec.getNextFrame();
@@ -250,6 +278,10 @@ class NoteDrawingSurfaceState extends State<NoteDrawingSurface> {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     canvas.drawImage(bgFrame.image, Offset.zero, Paint());
+    canvas.save();
+    canvas.translate(width / 2, height / 2);
+    canvas.scale(drawingScale);
+    canvas.translate(-width / 2, -height / 2);
     canvas.drawImageRect(
       drawFrame.image,
       Rect.fromLTWH(
@@ -261,6 +293,7 @@ class NoteDrawingSurfaceState extends State<NoteDrawingSurface> {
       Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
       Paint()..filterQuality = FilterQuality.high,
     );
+    canvas.restore();
     final picture = recorder.endRecording();
     final composed = await picture.toImage(width, height);
     final out = await composed.toByteData(format: ui.ImageByteFormat.png);
@@ -275,6 +308,7 @@ class NoteDrawingSurfaceState extends State<NoteDrawingSurface> {
     try {
       await controller.hide();
       await _applyIosTool();
+      await NoteCanvasZoom.setZoom(_backgroundZoom);
       final pending = widget.pendingPencilKitData;
       if (pending != null && pending.isNotEmpty) {
         await _loadPendingPencilKit(pending);
@@ -424,16 +458,27 @@ class NoteDrawingSurfaceState extends State<NoteDrawingSurface> {
     final paper = Stack(
       fit: StackFit.expand,
       children: [
-        CustomPaint(
-          painter: NotePaperPainter(type: widget.paperType),
-        ),
+        CustomPaint(painter: NotePaperPainter(type: widget.paperType)),
         widget.backgroundImage,
       ],
     );
     if (boundaryKey == null) {
       return paper;
     }
-    return RepaintBoundary(key: boundaryKey, child: paper);
+    return RepaintBoundary(
+      key: boundaryKey,
+      child: _buildScaledCanvas(child: paper),
+    );
+  }
+
+  Widget _buildScaledCanvas({required Widget child}) {
+    return ClipRect(
+      child: Transform.scale(
+        scale: _backgroundZoom,
+        alignment: Alignment.center,
+        child: child,
+      ),
+    );
   }
 
   Widget _buildIosCanvas() {

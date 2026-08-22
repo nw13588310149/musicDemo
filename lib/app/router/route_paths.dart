@@ -9,12 +9,14 @@ abstract final class RoutePaths {
   static const smartCampusSignRecords = '/smart-campus/sign-records';
   static const smartCampusSignApprovals = '/smart-campus/sign-approvals';
   static const smartSinging = '/smart-singing';
+
   /// 智能视唱：用户上传 MP3，离线分析音高曲线后跟随演唱实时打分。
   static const smartSightSinging = '/smart-sight-singing';
   static const myNotes = '/my-notes';
   static const myCollection = '/my-collection';
   static const personalCenter = '/personal-center';
   static const helpFeedback = '/help-feedback';
+  static const helpGuide = '/help-guide';
   static const login = '/login';
   static const noteBg = '/note_bg';
   static const answerQuestions = '/answerQuestions';

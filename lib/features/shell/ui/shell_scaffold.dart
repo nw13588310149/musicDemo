@@ -67,7 +67,10 @@ class _ShellScaffoldState extends ConsumerState<ShellScaffold> {
     }
   }
 
-  void _handleNetworkTransition(AppNetworkState? previous, AppNetworkState next) {
+  void _handleNetworkTransition(
+    AppNetworkState? previous,
+    AppNetworkState next,
+  ) {
     if (next.hasConnection) {
       _dismissOfflineDialogIfOpen();
       if (previous?.hasConnection == false) {
@@ -154,7 +157,10 @@ class _ShellScaffoldState extends ConsumerState<ShellScaffold> {
       }
     });
 
-    ref.listen<AppNetworkState>(appNetworkMonitorProvider, _handleNetworkTransition);
+    ref.listen<AppNetworkState>(
+      appNetworkMonitorProvider,
+      _handleNetworkTransition,
+    );
 
     // 学校绑定遮罩优先：一旦遮罩生效，所有点击都被它兜住，VIP 校验暂停。
     // 等绑定完成、遮罩消失，下一帧 build 会按需触发 VIP 跳转。
@@ -181,7 +187,9 @@ class _ShellScaffoldState extends ConsumerState<ShellScaffold> {
       sidebar: RepaintBoundary(
         child: ShellLeftNav(
           state: state,
-          currentRoute: widget.currentRoute,
+          currentRoute: widget.currentRoute == RoutePaths.helpGuide
+              ? RoutePaths.smartCampus
+              : widget.currentRoute,
           onToggleCollapse: controller.toggleCollapse,
           onNavigate: (route) => _navigate(context, ref, route),
         ),
@@ -231,14 +239,19 @@ class _ShellScaffoldState extends ConsumerState<ShellScaffold> {
         return;
       }
       AppToast.show(context, '请先开通会员');
-      Navigator.of(
-        context,
-      ).pushReplacementNamed(RoutePaths.personalCenter);
+      Navigator.of(context).pushReplacementNamed(RoutePaths.personalCenter);
     });
   }
 
   void _navigate(BuildContext context, WidgetRef ref, String route) {
     final navigator = Navigator.of(context);
+
+    // 帮助页是覆盖当前业务页的全局说明页，保留来源路由，返回箭头才能回到
+    // 用户进入帮助前的位置；其余主导航仍沿用 replacement 语义。
+    if (route == RoutePaths.helpGuide) {
+      navigator.pushNamed(route);
+      return;
+    }
 
     // 切换主导航前先 pop 掉栈顶 overlay route，避免其叠在 Shell 上。
     if (navigator.canPop()) {
@@ -250,21 +263,15 @@ class _ShellScaffoldState extends ConsumerState<ShellScaffold> {
       // 首页（同时停掉在跑的录音 / 试听）。其他模块再点同一项保持原有"啥
       // 也不做"的行为，避免影响它们的页内 UI 状态。
       if (route == RoutePaths.recording) {
-        ref
-            .read(recordingSystemControllerProvider.notifier)
-            .enterListHome();
+        ref.read(recordingSystemControllerProvider.notifier).enterListHome();
       } else if (route == RoutePaths.smartSinging ||
           route == RoutePaths.smartSightSinging) {
         unawaited(
-          ref
-              .read(smartSightSingingControllerProvider.notifier)
-              .returnToHome(),
+          ref.read(smartSightSingingControllerProvider.notifier).returnToHome(),
         );
       } else if (route == RoutePaths.home &&
           ref.exists(homeDashboardControllerProvider)) {
-        unawaited(
-          ref.read(homeDashboardControllerProvider.notifier).refresh(),
-        );
+        unawaited(ref.read(homeDashboardControllerProvider.notifier).refresh());
       }
       return;
     }

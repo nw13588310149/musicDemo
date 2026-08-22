@@ -41,8 +41,6 @@ class AiChatController extends StateNotifier<AiChatState> {
   bool _streamUsesReasoningUi = false;
   String? _sessionsOwnerUserId;
 
-  static const String _chatRobot = 'deepseek';
-
   @override
   void dispose() {
     detachSocketHandler();
@@ -95,11 +93,38 @@ class AiChatController extends StateNotifier<AiChatState> {
   }
 
   void toggleDeepThinking() {
+    if (!state.selectedModel.supportsDeepThinking) {
+      return;
+    }
     state = state.copyWith(isDeepThinking: !state.isDeepThinking);
   }
 
   void toggleWebSearching() {
+    if (!state.selectedModel.supportsWebSearch) {
+      return;
+    }
     state = state.copyWith(isWebSearching: !state.isWebSearching);
+  }
+
+  Future<String?> selectModel(AiChatModel model) async {
+    if (model == state.selectedModel || state.sending) {
+      return null;
+    }
+    _cancelAiStream(removeStreamingMessage: true);
+    state = state.copyWith(
+      selectedModel: model,
+      isDeepThinking: model.supportsDeepThinking && state.isDeepThinking,
+      isWebSearching: model.supportsWebSearch && state.isWebSearching,
+      clearActiveSessionId: true,
+      sessions: const [],
+      messages: const [],
+      pendingAttachments: const [],
+      isNewConversation: true,
+      waitingAssistant: false,
+      sending: false,
+      messagesLoading: false,
+    );
+    return loadSessions(autoSelectFirst: false);
   }
 
   void toggleReasoningExpanded(String messageId) {
@@ -115,7 +140,7 @@ class AiChatController extends StateNotifier<AiChatState> {
   Future<String?> loadSessions({bool autoSelectFirst = false}) async {
     state = state.copyWith(sessionsLoading: true);
     try {
-      final response = await _repository.getSessionList(robot: _chatRobot);
+      final response = await _repository.getSessionList();
       if (!response.isSuccess) {
         state = state.copyWith(sessionsLoading: false);
         return response.displayMsg;
@@ -285,7 +310,7 @@ class AiChatController extends StateNotifier<AiChatState> {
         final title = _titleFromFirstUserMessage(visibleText);
         final createResponse = await _repository.createSession(
           title: title,
-          robot: _chatRobot,
+          robot: state.selectedModel.robot,
         );
         if (!createResponse.isSuccess) {
           _setPendingMessageStatus(pendingId, AiChatMessageStatus.failed);
@@ -325,7 +350,8 @@ class AiChatController extends StateNotifier<AiChatState> {
         sessionId: sessionId,
         content: requestContent,
         isDeep: state.isDeepThinking,
-        model: state.effectiveChatModel,
+        isNet: state.isWebSearching,
+        model: state.selectedModel.requestModel,
         systemPrompt: _assistantSystemRule(),
         attachments: attachments.map((item) => item.toJson()).toList(),
       );
@@ -382,7 +408,8 @@ class AiChatController extends StateNotifier<AiChatState> {
         sessionId: state.activeSessionId!,
         content: requestContent,
         isDeep: state.isDeepThinking,
-        model: state.effectiveChatModel,
+        isNet: state.isWebSearching,
+        model: state.selectedModel.requestModel,
         systemPrompt: _assistantSystemRule(),
         attachments: attachments.map((item) => item.toJson()).toList(),
       );

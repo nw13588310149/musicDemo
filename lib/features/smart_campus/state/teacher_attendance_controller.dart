@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_response.dart';
 import '../../school/data/school_repository.dart';
+import '../../shell/state/shell_controller.dart';
 import '../data/course_sign_data.dart';
 import '../data/teacher_attendance_data.dart';
 import '../data/teacher_repository.dart';
@@ -17,6 +18,7 @@ final teacherAttendanceControllerProvider =
       final controller = TeacherAttendanceController(
         repository: ref.watch(teacherRepositoryProvider),
         schoolRepository: ref.watch(schoolRepositoryProvider),
+        currentTeacherId: ref.watch(shellControllerProvider).user.id,
       );
       ref.onDispose(controller.stopLiveSync);
       return controller;
@@ -27,12 +29,15 @@ class TeacherAttendanceController
   TeacherAttendanceController({
     required TeacherRepository repository,
     required SchoolRepository schoolRepository,
+    required String currentTeacherId,
   }) : _repository = repository,
        _schoolRepository = schoolRepository,
+       _currentTeacherId = currentTeacherId,
        super(const TeacherAttendanceState());
 
   final TeacherRepository _repository;
   final SchoolRepository _schoolRepository;
+  final String _currentTeacherId;
   bool _initialized = false;
   Timer? _liveSyncTimer;
   bool _liveSyncActive = false;
@@ -130,7 +135,7 @@ class TeacherAttendanceController
           ? TeacherAttendanceSummary.fromJson(summaryResponse.data)
           : state.summary,
       recentRecords: recentResponse.isSuccess
-          ? parseTeacherSignHistoryList(recentResponse.data)
+          ? _filterSignHistory(parseTeacherSignHistoryList(recentResponse.data))
           : state.recentRecords,
       error: errors.join('；'),
     );
@@ -189,7 +194,7 @@ class TeacherAttendanceController
     state = state.copyWith(
       loadingHistory: false,
       historyRecords: response.isSuccess
-          ? parseTeacherSignHistoryList(response.data)
+          ? _filterSignHistory(parseTeacherSignHistoryList(response.data))
           : state.historyRecords,
       historyError: response.isSuccess ? '' : response.displayMsg,
     );
@@ -374,7 +379,18 @@ class TeacherAttendanceController
     );
     if (!response.isSuccess) return;
     state = state.copyWith(
-      recentRecords: parseTeacherSignHistoryList(response.data),
+      recentRecords: _filterSignHistory(
+        parseTeacherSignHistoryList(response.data),
+      ),
+    );
+  }
+
+  List<TeacherSignHistoryItem> _filterSignHistory(
+    List<TeacherSignHistoryItem> records,
+  ) {
+    return filterTeacherTaughtSignHistory(
+      records,
+      currentTeacherId: _currentTeacherId,
     );
   }
 

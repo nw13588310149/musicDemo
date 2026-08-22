@@ -8,6 +8,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
   private var lowLatencyNoteAudio: LowLatencyNoteAudio?
   private var musicPlayPitchAudio: MusicPlayPitchAudio?
   private var musicPlayAudioVisualizer: MusicPlayAudioVisualizer?
+  private var noteCanvasZoomCoordinator: NoteCanvasZoomCoordinator?
 
   func scene(
     _ scene: UIScene,
@@ -48,6 +49,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     )
     musicPlayAudioVisualizer = MusicPlayAudioVisualizer(
       messenger: flutterViewController.binaryMessenger
+    )
+    noteCanvasZoomCoordinator = NoteCanvasZoomCoordinator(
+      messenger: flutterViewController.binaryMessenger,
+      rootView: flutterViewController.view
     )
 
     let window = UIWindow(windowScene: windowScene)

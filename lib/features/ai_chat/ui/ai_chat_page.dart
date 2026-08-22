@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
@@ -107,9 +107,9 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final userId = ref.read(shellControllerProvider).user.id;
-      ref.read(aiChatControllerProvider.notifier).syncSessionsWithCurrentUser(
-        userId,
-      );
+      ref
+          .read(aiChatControllerProvider.notifier)
+          .syncSessionsWithCurrentUser(userId);
     });
   }
 
@@ -126,9 +126,9 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
     ref.listen<String>(
       shellControllerProvider.select((state) => state.user.id),
       (_, next) {
-        ref.read(aiChatControllerProvider.notifier).syncSessionsWithCurrentUser(
-          next,
-        );
+        ref
+            .read(aiChatControllerProvider.notifier)
+            .syncSessionsWithCurrentUser(next);
       },
     );
     final state = ref.watch(aiChatControllerProvider);
@@ -893,71 +893,72 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
             child: state.messagesLoading && state.messages.isEmpty
                 ? const SizedBox.shrink()
                 : Listener(
-                  // 用户手指压下 / 抬起时同步 _userTouchingList。压下后立刻把
-                  // 还没执行完的「贴底滚动」级联取消，避免它在用户拖拽过程中
-                  // 抢走 ScrollPosition 的 activity。
-                  onPointerDown: (_) {
-                    _userTouchingList = true;
-                    _bottomScrollTimer?.cancel();
-                  },
-                  onPointerUp: (_) => _userTouchingList = false,
-                  onPointerCancel: (_) => _userTouchingList = false,
-                  child: ListView.builder(
-                    controller: _scrollCtrl,
-                    padding: const EdgeInsets.fromLTRB(
-                      _mainHorizontalPadding,
-                      28,
-                      _mainHorizontalPadding,
-                      20,
-                    ),
-                    itemCount:
-                        state.messages.length + (showWaitingAssistant ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index == state.messages.length) {
-                        return const Padding(
-                          padding: EdgeInsets.only(bottom: 14),
-                          child: Text(
-                            '小艺同学正在思考中…',
-                            style: TextStyle(
-                              color: _textHint,
-                              fontSize: 13,
-                              fontFamily: 'PingFang SC',
-                              height: 1.5,
-                            ),
-                          ),
-                        );
-                      }
-                      final message = state.messages[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 20),
-                        child: message.type == AiChatMessageType.user
-                            ? _buildUserMessage(
-                                message: message,
-                                controller: controller,
-                                maxWidth: userBubbleMaxWidth,
-                              )
-                            : _buildAiMessage(
-                                message: message,
-                                controller: controller,
-                                maxWidth: aiBubbleMaxWidth,
-                              ),
-                      );
+                    // 用户手指压下 / 抬起时同步 _userTouchingList。压下后立刻把
+                    // 还没执行完的「贴底滚动」级联取消，避免它在用户拖拽过程中
+                    // 抢走 ScrollPosition 的 activity。
+                    onPointerDown: (_) {
+                      _userTouchingList = true;
+                      _bottomScrollTimer?.cancel();
                     },
+                    onPointerUp: (_) => _userTouchingList = false,
+                    onPointerCancel: (_) => _userTouchingList = false,
+                    child: ListView.builder(
+                      controller: _scrollCtrl,
+                      padding: const EdgeInsets.fromLTRB(
+                        _mainHorizontalPadding,
+                        28,
+                        _mainHorizontalPadding,
+                        20,
+                      ),
+                      itemCount:
+                          state.messages.length +
+                          (showWaitingAssistant ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index == state.messages.length) {
+                          return const Padding(
+                            padding: EdgeInsets.only(bottom: 14),
+                            child: Text(
+                              '小艺同学正在思考中…',
+                              style: TextStyle(
+                                color: _textHint,
+                                fontSize: 13,
+                                fontFamily: 'PingFang SC',
+                                height: 1.5,
+                              ),
+                            ),
+                          );
+                        }
+                        final message = state.messages[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 20),
+                          child: message.type == AiChatMessageType.user
+                              ? _buildUserMessage(
+                                  message: message,
+                                  controller: controller,
+                                  maxWidth: userBubbleMaxWidth,
+                                )
+                              : _buildAiMessage(
+                                  message: message,
+                                  controller: controller,
+                                  maxWidth: aiBubbleMaxWidth,
+                                ),
+                        );
+                      },
+                    ),
                   ),
-                ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            _mainHorizontalPadding,
-            0,
-            _mainHorizontalPadding,
-            _mainBottomPadding,
           ),
-          child: _buildComposer(state, controller, composerWidth),
-        ),
-        _buildDisclaimer(),
-        SizedBox(height: _conversationBottomInset),
-      ],
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              _mainHorizontalPadding,
+              0,
+              _mainHorizontalPadding,
+              _mainBottomPadding,
+            ),
+            child: _buildComposer(state, controller, composerWidth),
+          ),
+          _buildDisclaimer(),
+          SizedBox(height: _conversationBottomInset),
+        ],
       ),
     );
   }
@@ -1249,9 +1250,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
             if (hasAttachments)
               SizedBox(
                 height: 50,
-                child: ClipRect(
-                  child: _buildAttachmentTray(state, controller),
-                ),
+                child: ClipRect(child: _buildAttachmentTray(state, controller)),
               ),
             // 输入区改为多行 textarea：占满输入框中剩余的纵向空间，
             // 内容超出时内部可滚动。Enter 换行；通过右下角发送按钮提交。
@@ -1306,13 +1305,17 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                 padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
                 child: Row(
                   children: [
+                    _modelSelector(state, controller),
+                    const SizedBox(width: 8),
                     _featureChip(
                       icon: state.isDeepThinking
                           ? AppAssets.aiChatThinkActive
                           : AppAssets.aiChatThink,
                       label: '深度思考',
                       active: state.isDeepThinking,
-                      onTap: controller.toggleDeepThinking,
+                      onTap: state.selectedModel.supportsDeepThinking
+                          ? controller.toggleDeepThinking
+                          : null,
                       activeTextColor: _purple,
                       activeBg: _purpleSoft,
                       iconSize: 20,
@@ -1326,7 +1329,9 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                           : AppAssets.aiChatSearch,
                       label: '联网搜索',
                       active: state.isWebSearching,
-                      onTap: controller.toggleWebSearching,
+                      onTap: state.selectedModel.supportsWebSearch
+                          ? controller.toggleWebSearching
+                          : null,
                       // 文字色 + 背景色与深度思考完全一致（紫色 #8741FF）。
                       activeTextColor: _purple,
                       activeBg: _purpleSoft,
@@ -1358,6 +1363,84 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
     );
   }
 
+  Widget _modelSelector(AiChatState state, AiChatController controller) {
+    return PopupMenuButton<AiChatModel>(
+      enabled: !state.sending,
+      tooltip: '切换模型',
+      // 菜单仅剩两个模型；向上紧贴按钮展开，避免使用旧三项菜单的固定偏移。
+      offset: const Offset(0, -96),
+      color: Colors.white,
+      surfaceTintColor: Colors.white,
+      elevation: 8,
+      popUpAnimationStyle: const AnimationStyle(
+        duration: Duration(milliseconds: 150),
+        reverseDuration: Duration(milliseconds: 100),
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      onSelected: (model) async {
+        final error = await controller.selectModel(model);
+        if (error != null && mounted) {
+          AppToast.show(context, error);
+        }
+      },
+      itemBuilder: (context) => AiChatModel.values.map((model) {
+        final selected = model == state.selectedModel;
+        return PopupMenuItem<AiChatModel>(
+          value: model,
+          height: 40,
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  model.label,
+                  style: TextStyle(
+                    color: selected ? _purple : _textPrimary,
+                    fontSize: 13,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: selected ? AppFont.w500 : AppFont.w400,
+                  ),
+                ),
+              ),
+              if (selected)
+                const Icon(Icons.check_rounded, size: 17, color: _purple),
+            ],
+          ),
+        );
+      }).toList(),
+      child: Container(
+        height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 11),
+        decoration: BoxDecoration(
+          border: Border.all(color: _border),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              state.selectedModel.label,
+              style: TextStyle(
+                color: _textPrimary,
+                fontSize: 12,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
+                height: 1.17,
+              ),
+            ),
+            const SizedBox(width: 4),
+            const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 17,
+              color: _textSecondary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildAttachmentTray(AiChatState state, AiChatController controller) {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
@@ -1379,15 +1462,19 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
     required String icon,
     required String label,
     required bool active,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
     required Color activeTextColor,
     required Color activeBg,
     required double iconSize,
+
     /// 图标右边缘与文案左侧的间距（逻辑像素）。深度思考默认 2；
     /// 「联网搜索」设计稿为 5。
     double iconLabelGap = 2,
   }) {
-    final textColor = active ? activeTextColor : _textHint;
+    final enabled = onTap != null;
+    final textColor = active
+        ? activeTextColor
+        : (enabled ? _textHint : _textHint.withValues(alpha: 0.5));
     final bgColor = active ? activeBg : Colors.transparent;
 
     return Material(
@@ -1406,7 +1493,10 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              AppAssetGraphic(icon, width: iconSize, height: iconSize),
+              Opacity(
+                opacity: enabled ? 1 : 0.5,
+                child: AppAssetGraphic(icon, width: iconSize, height: iconSize),
+              ),
               SizedBox(width: iconLabelGap),
               Text(
                 label,

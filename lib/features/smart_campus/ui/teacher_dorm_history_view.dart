@@ -37,7 +37,10 @@ import '../../shell/ui/shell_layout.dart';
 import 'widgets/smart_campus_stat_card.dart';
 import '../data/student_dormitory_data.dart' show DormitoryDetailStudentProfile;
 import '../data/teacher_dormitory_data.dart';
+import '../data/dormitory_check_data.dart';
 import '../state/teacher_dormitory_controller.dart';
+import '../../school/data/school_config_data.dart';
+import '../../school/state/school_config_controller.dart';
 import 'widgets/dormitory_detail_dialog.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -178,6 +181,15 @@ class _TeacherDormHistoryViewState
       AppToast.show(context, '未获取到查寝详情');
       return;
     }
+    final checkConfig =
+        ref.read(schoolDormitoryCheckConfigProvider).valueOrNull ??
+        SchoolDormitoryCheckConfig.empty;
+    final enrichedFields = enrichDormitoryDetailRequiredTime(
+      fields: fields,
+      checkType: record.session == _Session.morning ? '晨查寝' : '晚查寝',
+      recordDeadline: record.requiredTime,
+      config: checkConfig,
+    );
     final rawAvatar = record.headUrl.trim();
     final avatarUrl =
         rawAvatar.isNotEmpty ? MediaUrl.resolve(rawAvatar) : '';
@@ -187,7 +199,7 @@ class _TeacherDormHistoryViewState
     await showDormitoryDetailDialog(
       context,
       title: '${record.studentName} · 查寝详情',
-      fields: fields,
+      fields: enrichedFields,
       studentProfile: DormitoryDetailStudentProfile(
         name: record.studentName,
         avatarUrl: avatarUrl,
@@ -200,11 +212,14 @@ class _TeacherDormHistoryViewState
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final state = ref.watch(teacherDormitoryControllerProvider);
+    final checkConfig =
+        ref.watch(schoolDormitoryCheckConfigProvider).valueOrNull ??
+        SchoolDormitoryCheckConfig.empty;
     final days = _historyCalendarDays(DateTime.now());
     final selectedDayIndex = days.indexWhere(
       (day) => teacherDormitoryIsoDate(day.date) == state.selectedDate,
     );
-    final students = _historyStudentRecords(state.historyItems);
+    final students = _historyStudentRecords(state.historyItems, checkConfig);
     final filteredStudents = students
         .where((record) => record.session == _Session.evening)
         .toList(growable: false);
@@ -265,6 +280,7 @@ List<_CalendarDay> _historyCalendarDays(DateTime now) {
 
 List<_StudentRecord> _historyStudentRecords(
   List<TeacherDormitoryHistoryItem> items,
+  SchoolDormitoryCheckConfig checkConfig,
 ) {
   return [
     for (final item in items)
@@ -279,7 +295,11 @@ List<_StudentRecord> _historyStudentRecords(
             : _StudentStatus.absent,
         dormName: item.dormName.isEmpty ? '未分配宿舍' : item.dormName,
         date: item.checkDate,
-        requiredTime: '--',
+        requiredTime: resolveDormitoryRequiredDeadline(
+          recordDeadline: '',
+          checkType: item.isMorning ? '晨查寝' : '晚查寝',
+          config: checkConfig,
+        ),
         punchTime: item.checkTime,
         note: item.status == TeacherDormitoryStatus.late ? '晚归' : '无',
       ),

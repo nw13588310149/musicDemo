@@ -3,16 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/storage/app_storage.dart';
 
 final schoolRepositoryProvider = Provider<SchoolRepository>((ref) {
   final client = ref.watch(apiClientProvider);
-  return SchoolRepository(client: client);
+  final storage = ref.watch(appStorageProvider);
+  return SchoolRepository(client: client, storage: storage);
 });
 
 class SchoolRepository {
-  SchoolRepository({required this.client});
+  SchoolRepository({required this.client, required this.storage});
 
   final ApiClient client;
+  final AppStorage storage;
 
   /// v2: 同一用户可能绑定多所学校，返回的是 `List<Map>`，调用方按首项取用
   /// 即可（旧版 `/app/user/mySchool` 返回单 Map，已停用）。
@@ -119,4 +122,29 @@ class SchoolRepository {
     }
     return client.post('/app/school/v2/user/subjectList', data: body);
   }
+
+  /// 学校全局配置列表（查寝规定打卡时间等）。
+  ///
+  /// 请求体：`{ "schoolId": 1111 }`（小整数走 int；雪花 long 走字符串）。
+  Future<ApiResponse> schoolConfigList() {
+    final schoolId = _schoolIdBodyValue(storage.schoolId);
+    if (schoolId == null) {
+      return Future.value(ApiResponse.failure('未绑定学校'));
+    }
+    return client.post(
+      '/app/school/v2/user/schoolConfigList',
+      data: <String, dynamic>{'schoolId': schoolId},
+    );
+  }
+}
+
+/// 请求体 schoolId：可解析为整数的用小整数（如 1111），否则保留字符串。
+dynamic _schoolIdBodyValue(String raw) {
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty || trimmed == '0') return null;
+  final asInt = int.tryParse(trimmed);
+  if (asInt != null && asInt.toString() == trimmed) {
+    return asInt;
+  }
+  return trimmed;
 }

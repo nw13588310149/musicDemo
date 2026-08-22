@@ -7,8 +7,10 @@ import '../../features/common/ui/feature_default_pages.dart';
 import '../../features/common/ui/legacy_placeholder_content.dart';
 import '../../features/common/ui/terms_page.dart';
 import '../../features/courseware/ui/courseware_page.dart';
+import '../../features/circle/ui/circle_page.dart';
 import '../../features/dictation/ui/dictation_page.dart';
 import '../../features/home/ui/home_page.dart';
+import '../../features/help_guide/ui/help_guide_page.dart';
 import '../../features/my_collection/ui/my_collection_page.dart'
     as my_collection;
 import '../../features/my_notes/ui/my_notes_page.dart' as my_notes;
@@ -110,7 +112,10 @@ class AppRouter {
       case RoutePaths.school:
         return const SchoolCoursewareV2Page();
       case RoutePaths.circle:
-        return const SmartCampusCircleEntry();
+        // 独立路由入口（首页 / 侧栏）：返回时 pop 回发起页面。
+        // 智慧校园内部入口不走此路由，而是直接嵌入 CirclePage 并由
+        // SmartCampusController.backToDashboard() 处理返回。
+        return const CirclePage();
       case RoutePaths.courseware:
         return const MyCloudDrivePage();
       case RoutePaths.videoTutorial:
@@ -141,6 +146,8 @@ class AppRouter {
         return const primary_pages.FeedbackPage();
       case RoutePaths.helpFeedback:
         return const AppFeedbackPage();
+      case RoutePaths.helpGuide:
+        return const HelpGuidePage();
       // ── 首页九宫格功能默认页 ─────────────────────────────────────
       case RoutePaths.dictation:
         return const DictationPage();
@@ -241,6 +248,7 @@ class AppRouter {
       RoutePaths.myCollection: '我的收藏',
       RoutePaths.personalCenter: '个人中心',
       RoutePaths.helpFeedback: '意见反馈',
+      RoutePaths.helpGuide: '操作指南',
       RoutePaths.noteBg: '笔记背景',
       RoutePaths.answerQuestions: '答题入口',
       RoutePaths.camp: '闯关练习',

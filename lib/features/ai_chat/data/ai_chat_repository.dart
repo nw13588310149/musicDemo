@@ -17,14 +17,10 @@ class AiChatRepository {
 
   final ApiClient client;
 
-  Future<ApiResponse> getSessionList({
-    int current = 1,
-    int size = 50,
-    String robot = 'deepseek',
-  }) {
+  Future<ApiResponse> getSessionList({int current = 1, int size = 50}) {
     return client.post(
       '/app/user/chat-gpt/sessionList',
-      data: <String, dynamic>{'current': current, 'size': size, 'robot': robot},
+      data: <String, dynamic>{'current': current, 'size': size},
     );
   }
 
@@ -61,7 +57,8 @@ class AiChatRepository {
     required String sessionId,
     required String content,
     required bool isDeep,
-    required String model,
+    required bool isNet,
+    String? model,
     required String systemPrompt,
     List<Map<String, dynamic>> attachments = const [],
   }) {
@@ -72,7 +69,8 @@ class AiChatRepository {
         'sessionId': sessionId,
         'content': content,
         'isDeep': isDeep,
-        'model': model,
+        'isNet': isNet,
+        'model': ?model,
         'systemPrompt': systemPrompt,
         'system': systemPrompt,
         if (attachments.isNotEmpty) ...<String, dynamic>{

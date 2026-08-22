@@ -116,10 +116,11 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
     Navigator.pushNamed(context, RoutePaths.smartCampus);
   }
 
-  /// 跳转到智慧校园「校圈」子页，与群聊同样只占 Shell 主内容区。
+  /// 首页独立打开校圈，返回时保留首页作为路由栈的上一页。
   void _openSchoolCircle() {
-    ref.read(smartCampusControllerProvider.notifier).openSchoolCircle();
-    Navigator.pushNamed(context, RoutePaths.smartCampus);
+    // 首页入口使用独立校圈路由；CirclePage 默认 pop，因此可准确返回首页。
+    // 智慧校园内的入口则继续在其主内容区内打开，返回 dashboard。
+    Navigator.pushNamed(context, RoutePaths.circle);
   }
 
   @override

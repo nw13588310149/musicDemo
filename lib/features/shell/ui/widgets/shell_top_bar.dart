@@ -77,7 +77,7 @@ class ShellTopBar extends StatelessWidget {
                   height: ui(40),
                   fit: BoxFit.contain,
                 ),
-                onTap: () => _showToast(context, '帮助功能即将上线'),
+                onTap: () => onNavigate(RoutePaths.helpGuide),
               ),
               SizedBox(width: gap),
               _buildNotice(context),

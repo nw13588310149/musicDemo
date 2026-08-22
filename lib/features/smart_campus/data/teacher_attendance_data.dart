@@ -114,6 +114,7 @@ class TeacherSignHistoryItem {
     this.signOutTime = '',
     this.canMakeup = false,
     this.makeupStatus,
+    this.teacherId = '',
     this.teacherName = '',
     this.classroom = '',
     this.shouldCount = 0,
@@ -134,6 +135,9 @@ class TeacherSignHistoryItem {
   final String signOutTime;
   final bool canMakeup;
   final int? makeupStatus;
+
+  /// 任课老师 id；用于过滤「本人上过」的课次。
+  final String teacherId;
   final String teacherName;
   final String classroom;
   final int shouldCount;
@@ -163,6 +167,32 @@ class TeacherSignHistoryItem {
   }
 
   bool get hasAttendanceCounts => shouldCount > 0 || presentCount > 0;
+
+  /// 是否大课 / 小课之一。
+  bool get isBigOrSmallCourse =>
+      isBigCourseType(courseType) || isSmallCourseType(courseType);
+
+  /// 教师是否已完成该课次签到（大课一键入册 / 小课上下课签）。
+  bool get isTeacherTaught {
+    if (signInTime.trim().isNotEmpty || signOutTime.trim().isNotEmpty) {
+      return true;
+    }
+    if (isSmallCourseType(courseType)) {
+      return signStatus >= CourseSignFlowStatus.teacherStart.code;
+    }
+    if (isBigCourseType(courseType)) {
+      return signStatus >= CourseSignFlowStatus.studentStart.code ||
+          presentCount > 0;
+    }
+    return false;
+  }
+
+  /// 是否属于当前登录教师本人授课。
+  bool belongsToTeacher(String? currentTeacherId) {
+    if (currentTeacherId == null || currentTeacherId.isEmpty) return true;
+    if (teacherId.isEmpty) return true;
+    return teacherId == currentTeacherId;
+  }
 
   factory TeacherSignHistoryItem.fromJson(Map<String, dynamic> json) {
     final flat = _flattenHistoryMap(json);
@@ -207,6 +237,12 @@ class TeacherSignHistoryItem {
       signOutTime: signOutRaw,
       canMakeup: flat['canMakeup'] == true,
       makeupStatus: makeupStatus,
+      teacherId: pickFirstSnowflakeId(flat, [
+            'teacherId',
+            'teacherUserId',
+            'userId',
+          ]) ??
+          '',
       teacherName: _pickString(flat, [
         'teacherName',
         'teacherRealname',
@@ -307,6 +343,21 @@ List<TeacherSignHistoryItem> parseTeacherSignHistoryList(dynamic raw) {
       .toList(growable: false);
 }
 
+/// 历史 / 最近签课：仅保留当前教师本人已完成签到的大课、小课。
+List<TeacherSignHistoryItem> filterTeacherTaughtSignHistory(
+  List<TeacherSignHistoryItem> records, {
+  String? currentTeacherId,
+}) {
+  return records
+      .where(
+        (item) =>
+            item.isBigOrSmallCourse &&
+            item.belongsToTeacher(currentTeacherId) &&
+            item.isTeacherTaught,
+      )
+      .toList(growable: false);
+}
+
 Map<String, dynamic> _flattenHistoryMap(Map<String, dynamic> source) {
   final result = Map<String, dynamic>.from(source);
   void merge(dynamic raw, Map<String, String> aliases) {
@@ -328,7 +379,11 @@ Map<String, dynamic> _flattenHistoryMap(Map<String, dynamic> source) {
     'timeEnd': 'timeEnd',
   });
   merge(source['subject'], const {'name': 'subjectName'});
-  merge(source['teacher'], const {'realname': 'teacherRealname'});
+  merge(source['teacher'], const {
+    'realname': 'teacherRealname',
+    'id': 'teacherId',
+    'userId': 'teacherUserId',
+  });
   merge(source['classroom'], const {'name': 'classroomName'});
   merge(source['class'], const {
     'name': 'className',

@@ -78,6 +78,7 @@ const Color _kTextDivider = Color(0xFFCECED1);
 const Color _kStatusLate = Color(0xFFFF323C); // 迟到 / 缺课 / 未到
 const Color _kStatusLeave = Color(0xFF325BFF); // 请假
 const Color _kBigClassDot = Color(0xFFA773FF); // 大课 tag dot
+const Color _kSmallClassDot = Color(0xFF0CAC40); // 小课 tag dot
 
 // 各区块最低高度（Figma 设计值），避免数据加载前后页面高度跳动。
 const double _kRecentRecordSectionMinHeight = 178;
@@ -310,7 +311,7 @@ class _TeacherClassAttendanceViewState
   /// 链接触发）。子页面 banner 的返回按钮把它置回 false，回到本主页。
   bool _showHistory = false;
 
-  /// 历史记录子页面的过滤模式：0=全部 / 1=大班 / 2=小班。
+  /// 历史记录子页面的过滤模式：0=全部 / 1=大课 / 2=小课。
   int _historyFilterIdx = 0;
 
   /// 历史记录子页面的搜索文本（课程、节次、教室）。
@@ -2752,8 +2753,9 @@ String _durationLabel(int? start, int? end) {
 // =============================================================================
 // 历史记录 子页面
 //   - 顶部 banner（白→#F9EDFF 渐变 16 圆角，左 32 返回 + 居中 "历史记录"）
-//   - 控制条（44 高）：左侧 全部 / 大班 / 小班 三段 pill 切换；右侧 324×44
+//   - 控制条（44 高）：左侧 全部 / 大课 / 小课 三段 pill 切换；右侧 324×44
 //     白底搜索框（占位 "课程、节次、教室"）
+//   - 汇总条：「共 N 条 · 大课 X · 小课 Y」
 //   - 多个日期 section：日期 16/500 + 一行最多 3 张 312 宽签课卡
 //     （时间 + 节次 / 大小课 tag / 课名 + 教室 / 头像 / 灰底应到-实到-签到方式）
 // =============================================================================
@@ -2848,12 +2850,18 @@ class _HistoryView extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final filteredDays = <_HistoryDay>[];
+    var totalCount = 0;
+    var bigCount = 0;
+    var smallCount = 0;
     for (final day in _historyDaysFromRecords(records)) {
       final keep = day.records
           .where((r) => _matchKind(r.kind) && _matchQuery(r))
           .toList();
       if (keep.isNotEmpty) {
         filteredDays.add(_HistoryDay(date: day.date, records: keep));
+        totalCount += keep.length;
+        bigCount += keep.where((r) => r.kind == _ClassKind.big).length;
+        smallCount += keep.where((r) => r.kind == _ClassKind.small).length;
       }
     }
     return SmartCampusSecondaryPageShell(
@@ -2868,7 +2876,13 @@ class _HistoryView extends StatelessWidget {
             query: query,
             onQueryChanged: onQueryChanged,
           ),
-          SizedBox(height: ui(24)),
+          SizedBox(height: ui(12)),
+          _HistorySummaryBar(
+            total: totalCount,
+            bigCount: bigCount,
+            smallCount: smallCount,
+          ),
+          SizedBox(height: ui(12)),
           if (loading && filteredDays.isEmpty)
             const SizedBox.shrink()
           else if (error.isNotEmpty)
@@ -3017,7 +3031,7 @@ class _HistoryFilterRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    const labels = ['全部', '大班', '小班'];
+    const labels = ['全部', '大课', '小课'];
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -3051,6 +3065,71 @@ class _HistoryFilterRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _HistorySummaryBar extends StatelessWidget {
+  const _HistorySummaryBar({
+    required this.total,
+    required this.bigCount,
+    required this.smallCount,
+  });
+
+  final int total;
+  final int bigCount;
+  final int smallCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return RichText(
+      text: TextSpan(
+        style: TextStyle(
+          fontSize: ui(12),
+          fontFamily: 'PingFang SC',
+          fontWeight: AppFont.w400,
+          height: 1,
+        ),
+        children: [
+          const TextSpan(
+            text: '共 ',
+            style: TextStyle(color: _kTextHint),
+          ),
+          TextSpan(
+            text: '$total',
+            style: const TextStyle(color: _kTextDark),
+          ),
+          const TextSpan(
+            text: ' 条',
+            style: TextStyle(color: _kTextHint),
+          ),
+          const TextSpan(
+            text: '   ·   ',
+            style: TextStyle(color: _kTextDivider),
+          ),
+          const TextSpan(
+            text: '大课 ',
+            style: TextStyle(color: _kTextHint),
+          ),
+          TextSpan(
+            text: '$bigCount',
+            style: const TextStyle(color: _kBigClassDot),
+          ),
+          const TextSpan(
+            text: '   ·   ',
+            style: TextStyle(color: _kTextDivider),
+          ),
+          const TextSpan(
+            text: '小课 ',
+            style: TextStyle(color: _kTextHint),
+          ),
+          TextSpan(
+            text: '$smallCount',
+            style: const TextStyle(color: _kSmallClassDot),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -3,6 +3,7 @@ library;
 
 import '../../../core/network/media_url.dart';
 import '../../../core/network/snowflake_id.dart';
+import '../../school/data/school_config_data.dart';
 import 'student_dormitory_data.dart' show DormitoryDetailField;
 
 class DormitoryCheckStat {
@@ -710,6 +711,46 @@ bool _isEmptyDetailValue(String value) {
       trimmed == '—' ||
       trimmed == '--' ||
       trimmed == '未登记学生';
+}
+
+/// 详情弹窗补全「规定时间」：记录 / 接口缺失时回退 [SchoolDormitoryCheckConfig]。
+List<DormitoryDetailField> enrichDormitoryDetailRequiredTime({
+  required List<DormitoryDetailField> fields,
+  required String checkType,
+  required String recordDeadline,
+  required SchoolDormitoryCheckConfig config,
+}) {
+  final deadline = resolveDormitoryRequiredDeadline(
+    recordDeadline: recordDeadline,
+    checkType: checkType,
+    config: config,
+  );
+  if (deadline == '—') return fields;
+
+  var replaced = false;
+  final updated = <DormitoryDetailField>[];
+  for (final field in fields) {
+    if (field.label == '规定时间') {
+      replaced = true;
+      updated.add(
+        DormitoryDetailField(
+          field.label,
+          _isEmptyDetailValue(field.value) ? deadline : field.value,
+        ),
+      );
+    } else {
+      updated.add(field);
+    }
+  }
+  if (replaced) return updated;
+
+  final insertIndex = updated.indexWhere((field) => field.label == '打卡时间');
+  final requiredField = DormitoryDetailField('规定时间', deadline);
+  if (insertIndex >= 0) {
+    updated.insert(insertIndex, requiredField);
+    return updated;
+  }
+  return [...updated, requiredField];
 }
 
 /// 详情接口字段缺失时，用查寝历史列表行补全展示值。

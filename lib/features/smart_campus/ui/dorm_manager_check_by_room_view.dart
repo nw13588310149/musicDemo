@@ -44,6 +44,8 @@ import '../../../core/widgets/popup_selector_field.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/dormitory_check_data.dart';
 import '../state/dormitory_manager_controller.dart';
+import '../../school/data/school_config_data.dart';
+import '../../school/state/school_config_controller.dart';
 import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -78,13 +80,31 @@ class _DormManagerCheckByRoomViewState
   DormitoryBuildingOption _selectedBuilding = DormitoryBuildingOption.all;
   DormitoryFloorOption _selectedFloor = DormitoryFloorOption.all;
 
-  String _deadlineText(List<DormitoryRoomCheck> rooms) {
+  String _deadlineText(
+    List<DormitoryRoomCheck> rooms,
+    SchoolDormitoryCheckConfig checkConfig,
+  ) {
     for (final room in rooms) {
-      if (room.deadline.isNotEmpty && room.deadline != '—') {
-        return '$_checkDate ${room.deadline}';
+      final deadline = _roomDeadline(room, checkConfig);
+      if (deadline.isNotEmpty && deadline != '—') {
+        return '$_checkDate $deadline';
       }
     }
+    if (checkConfig.eveningDeadline.isNotEmpty) {
+      return '$_checkDate ${checkConfig.eveningDeadline}';
+    }
     return '$_checkDate 查寝';
+  }
+
+  String _roomDeadline(
+    DormitoryRoomCheck room,
+    SchoolDormitoryCheckConfig checkConfig,
+  ) {
+    return resolveDormitoryRequiredDeadline(
+      recordDeadline: room.deadline,
+      checkType: room.session,
+      config: checkConfig,
+    );
   }
 
   @override
@@ -182,6 +202,9 @@ class _DormManagerCheckByRoomViewState
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final state = ref.watch(dormitoryManagerControllerProvider);
+    final checkConfig =
+        ref.watch(schoolDormitoryCheckConfigProvider).valueOrNull ??
+        SchoolDormitoryCheckConfig.empty;
     final stat = state.roomCheckStat;
     final rooms = state.roomChecks;
     return Container(
@@ -207,7 +230,7 @@ class _DormManagerCheckByRoomViewState
             Padding(
               padding: EdgeInsets.only(left: ui(4)),
               child: Text(
-                _deadlineText(rooms),
+                _deadlineText(rooms, checkConfig),
                 style: TextStyle(
                   fontSize: ui(16),
                   color: _kTextDark,
@@ -234,6 +257,7 @@ class _DormManagerCheckByRoomViewState
                 if (i > 0) SizedBox(height: ui(16)),
                 _RoomCard(
                   room: rooms[i],
+                  deadlineLabel: _roomDeadline(rooms[i], checkConfig),
                   onCheckInAll:
                       rooms[i].allChecked ||
                           state.submittingRoomIds.contains(rooms[i].roomId)
@@ -601,11 +625,13 @@ class _StatsRow extends StatelessWidget {
 class _RoomCard extends StatelessWidget {
   const _RoomCard({
     required this.room,
+    required this.deadlineLabel,
     required this.onCheckInAll,
     required this.onChangeStatus,
   });
 
   final DormitoryRoomCheck room;
+  final String deadlineLabel;
   final VoidCallback? onCheckInAll;
   final void Function(
     DormitoryRoomStudent student,
@@ -627,7 +653,11 @@ class _RoomCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _RoomHeader(room: room, onCheckInAll: onCheckInAll),
+          _RoomHeader(
+            room: room,
+            deadlineLabel: deadlineLabel,
+            onCheckInAll: onCheckInAll,
+          ),
           SizedBox(height: ui(12)),
           _RoomStudentGrid(
             students: room.students,
@@ -640,9 +670,14 @@ class _RoomCard extends StatelessWidget {
 }
 
 class _RoomHeader extends StatelessWidget {
-  const _RoomHeader({required this.room, required this.onCheckInAll});
+  const _RoomHeader({
+    required this.room,
+    required this.deadlineLabel,
+    required this.onCheckInAll,
+  });
 
   final DormitoryRoomCheck room;
+  final String deadlineLabel;
 
   /// 为 `null` 时按钮置灰（已完成全员打卡时）。
   final VoidCallback? onCheckInAll;
@@ -706,7 +741,7 @@ class _RoomHeader extends StatelessWidget {
                 ),
                 SizedBox(height: ui(4)),
                 Text(
-                  '${room.students.length}人·${room.session}·${room.deadline}',
+                  '${room.students.length}人·${room.session}·$deadlineLabel',
                   style: TextStyle(
                     fontSize: ui(12),
                     color: _kTextHint,

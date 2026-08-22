@@ -43,8 +43,11 @@ import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import 'widgets/smart_campus_stat_card.dart';
 import '../data/student_dormitory_data.dart';
+import '../data/dormitory_check_data.dart';
 import '../state/student_dormitory_controller.dart';
 import '../state/student_dormitory_state.dart';
+import '../../school/data/school_config_data.dart';
+import '../../school/state/school_config_controller.dart';
 import 'widgets/dormitory_detail_dialog.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -96,7 +99,10 @@ class _StudentDormCheckViewState extends ConsumerState<StudentDormCheckView> {
     );
   }
 
-  List<_DormCheckRecord> _recordsFromState(List<StudentDormitoryCheckItem> items) {
+  List<_DormCheckRecord> _recordsFromState(
+    List<StudentDormitoryCheckItem> items,
+    SchoolDormitoryCheckConfig checkConfig,
+  ) {
     return [
       for (final item in items)
         _DormCheckRecord(
@@ -105,7 +111,11 @@ class _StudentDormCheckViewState extends ConsumerState<StudentDormCheckView> {
           status: _mapStatus(item.status),
           dorm: item.dormName.isEmpty ? '—' : item.dormName,
           date: item.checkDate,
-          requiredTime: item.deadline.isEmpty ? '—' : item.deadline,
+          requiredTime: resolveDormitoryRequiredDeadline(
+            recordDeadline: item.deadline,
+            checkType: item.checkType,
+            config: checkConfig,
+          ),
           stampedTime: item.checkTime == '—' ? null : item.checkTime,
           note: item.remark,
         ),
@@ -170,10 +180,24 @@ class _StudentDormCheckViewState extends ConsumerState<StudentDormCheckView> {
       AppToast.show(context, '未获取到查寝详情');
       return;
     }
+    final checkConfig =
+        ref.read(schoolDormitoryCheckConfigProvider).valueOrNull ??
+        SchoolDormitoryCheckConfig.empty;
+    final record = ref
+        .read(studentDormitoryControllerProvider)
+        .records
+        .where((item) => item.id == id)
+        .firstOrNull;
+    final enrichedFields = enrichDormitoryDetailRequiredTime(
+      fields: fields,
+      checkType: record?.checkType ?? '晚查寝',
+      recordDeadline: record?.deadline ?? '',
+      config: checkConfig,
+    );
     await showDormitoryDetailDialog(
       context,
       title: title,
-      fields: fields,
+      fields: enrichedFields,
     );
   }
 
@@ -218,7 +242,10 @@ class _StudentDormCheckViewState extends ConsumerState<StudentDormCheckView> {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final state = ref.watch(studentDormitoryControllerProvider);
-    final records = _recordsFromState(state.records);
+    final checkConfig =
+        ref.watch(schoolDormitoryCheckConfigProvider).valueOrNull ??
+        SchoolDormitoryCheckConfig.empty;
+    final records = _recordsFromState(state.records, checkConfig);
     final visible = _visibleRecords(records);
     final dormLabel = state.dormInfo.displayLabel;
     final normalCount = state.stat.normalCount;

@@ -2,6 +2,21 @@ enum AiChatMessageType { user, ai }
 
 enum AiChatMessageStatus { sending, sent, failed }
 
+enum AiChatModel {
+  deepSeek(label: 'DeepSeek', robot: 'DeepSeek'),
+  doubao(label: 'Doubao', robot: 'Doubao');
+
+  const AiChatModel({required this.label, required this.robot});
+
+  final String label;
+  final String robot;
+
+  bool get supportsDeepThinking => true;
+  bool get supportsWebSearch => this == AiChatModel.doubao;
+
+  String get requestModel => robot;
+}
+
 class AiChatSession {
   const AiChatSession({required this.id, required this.title, this.sortTime});
 
@@ -99,6 +114,7 @@ class AiChatSessionGroup {
 class AiChatState {
   const AiChatState({
     this.sidebarCollapsed = false,
+    this.selectedModel = AiChatModel.deepSeek,
     this.isDeepThinking = false,
     this.isWebSearching = false,
     this.sessionsLoading = false,
@@ -114,6 +130,7 @@ class AiChatState {
   });
 
   final bool sidebarCollapsed;
+  final AiChatModel selectedModel;
   final bool isDeepThinking;
   final bool isWebSearching;
   final bool sessionsLoading;
@@ -127,12 +144,9 @@ class AiChatState {
   final List<AiChatMessage> messages;
   final List<AiChatAttachment> pendingAttachments;
 
-  String get effectiveChatModel {
-    return isDeepThinking ? 'deepseek-reasoner' : 'deepseek-chat';
-  }
-
   AiChatState copyWith({
     bool? sidebarCollapsed,
+    AiChatModel? selectedModel,
     bool? isDeepThinking,
     bool? isWebSearching,
     bool? sessionsLoading,
@@ -149,6 +163,7 @@ class AiChatState {
   }) {
     return AiChatState(
       sidebarCollapsed: sidebarCollapsed ?? this.sidebarCollapsed,
+      selectedModel: selectedModel ?? this.selectedModel,
       isDeepThinking: isDeepThinking ?? this.isDeepThinking,
       isWebSearching: isWebSearching ?? this.isWebSearching,
       sessionsLoading: sessionsLoading ?? this.sessionsLoading,

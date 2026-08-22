@@ -42,6 +42,8 @@ import '../data/dormitory_check_data.dart';
 import '../data/student_dormitory_data.dart' show DormitoryDetailStudentProfile;
 import '../services/dormitory_export_saver.dart';
 import '../state/dormitory_manager_controller.dart';
+import '../../school/data/school_config_data.dart';
+import '../../school/state/school_config_controller.dart';
 import 'widgets/dormitory_detail_dialog.dart';
 import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -210,9 +212,18 @@ class _DormManagerCheckHistoryViewState
         .read(dormitoryManagerControllerProvider.notifier)
         .loadCheckDetail(item.id);
     if (!mounted) return;
-    final fields = apiFields.isEmpty
+    final checkConfig =
+        ref.read(schoolDormitoryCheckConfigProvider).valueOrNull ??
+        SchoolDormitoryCheckConfig.empty;
+    var fields = apiFields.isEmpty
         ? buildDormitoryCheckDetailFieldsFromHistoryItem(item)
         : mergeDormitoryCheckDetailFields(fields: apiFields, item: item);
+    fields = enrichDormitoryDetailRequiredTime(
+      fields: fields,
+      checkType: item.checkType,
+      recordDeadline: item.deadline,
+      config: checkConfig,
+    );
     if (fields.isEmpty) {
       AppToast.show(context, '未获取到查寝详情');
       return;

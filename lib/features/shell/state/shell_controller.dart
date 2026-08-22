@@ -442,6 +442,7 @@ class ShellController extends StateNotifier<ShellState> {
     RoutePaths.info,
     RoutePaths.set,
     RoutePaths.helpFeedback,
+    RoutePaths.helpGuide,
     RoutePaths.fankui,
     RoutePaths.qrcode,
     RoutePaths.email,

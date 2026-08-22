@@ -3240,7 +3240,7 @@ class _StudentManageCard extends StatelessWidget {
                         children: [
                           _phoneCell('本人电话', data.phone),
                           _phoneCell(
-                            '家长${data.parentName}电话',
+                            '家长电话',
                             data.parentPhone,
                           ),
                         ],

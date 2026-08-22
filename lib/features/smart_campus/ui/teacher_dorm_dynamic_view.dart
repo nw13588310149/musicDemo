@@ -46,6 +46,8 @@ import '../data/teacher_dormitory_data.dart';
 import '../state/smart_campus_controller.dart';
 import '../state/smart_campus_state.dart';
 import '../state/dorm_class_dormitory_controller.dart';
+import '../../school/data/school_config_data.dart';
+import '../../school/state/school_config_controller.dart';
 import 'widgets/dormitory_detail_dialog.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -262,7 +264,10 @@ class _TeacherDormDynamicViewState
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final state = ref.watch(dormClassDormitoryControllerProvider);
-    final students = _studentRecords(state.dynamicItems);
+    final checkConfig =
+        ref.watch(schoolDormitoryCheckConfigProvider).valueOrNull ??
+        SchoolDormitoryCheckConfig.empty;
+    final students = _studentRecords(state.dynamicItems, checkConfig);
     final dormRecords = const <_DormRecord>[];
     final punchAudits = _punchAuditRecords(state.makeupItems);
     final pendingPunchCount = punchAudits
@@ -428,7 +433,10 @@ class _TeacherDormDynamicViewState
   }
 }
 
-List<_StudentRecord> _studentRecords(List<TeacherDormitoryDynamicItem> items) {
+List<_StudentRecord> _studentRecords(
+  List<TeacherDormitoryDynamicItem> items,
+  SchoolDormitoryCheckConfig checkConfig,
+) {
   return [
     for (final item in items)
       _StudentRecord(
@@ -442,7 +450,11 @@ List<_StudentRecord> _studentRecords(List<TeacherDormitoryDynamicItem> items) {
         },
         dormName: item.dormName.isEmpty ? '未分配宿舍' : item.dormName,
         date: item.checkDate.isEmpty ? '--' : item.checkDate,
-        requiredTime: '--',
+        requiredTime: resolveDormitoryRequiredDeadline(
+          recordDeadline: '',
+          checkType: '晚查寝',
+          config: checkConfig,
+        ),
         punchTime: item.checkTime,
         bedName: item.bedName.isEmpty ? '无' : item.bedName,
       ),

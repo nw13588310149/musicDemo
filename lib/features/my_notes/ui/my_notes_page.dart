@@ -29,6 +29,7 @@ class _MyNotesPageState extends ConsumerState<MyNotesPage> {
   List<Offset> _activeStroke = const <Offset>[];
   bool _iosCanUndo = false;
   bool _iosCanRedo = false;
+  double _backgroundZoom = 1;
 
   @override
   Widget build(BuildContext context) {
@@ -88,6 +89,16 @@ class _MyNotesPageState extends ConsumerState<MyNotesPage> {
             _iosCanRedo = history.canRedo;
           });
         },
+        backgroundZoom: _backgroundZoom,
+        onZoomIn: () => _drawingSurfaceKey.currentState?.zoomBackgroundIn(),
+        onZoomOut: () => _drawingSurfaceKey.currentState?.zoomBackgroundOut(),
+        onResetZoom: () =>
+            _drawingSurfaceKey.currentState?.resetBackgroundZoom(),
+        onBackgroundZoomChanged: (zoom) {
+          if (_backgroundZoom != zoom) {
+            setState(() => _backgroundZoom = zoom);
+          }
+        },
         onPendingPencilKitConsumed: () {
           ref
               .read(myNotesControllerProvider.notifier)
@@ -131,6 +142,7 @@ class _MyNotesPageState extends ConsumerState<MyNotesPage> {
       _activeStroke = const <Offset>[];
       _iosCanUndo = false;
       _iosCanRedo = false;
+      _backgroundZoom = 1;
     });
     ref.read(myNotesControllerProvider.notifier).backToList();
   }
@@ -139,6 +151,7 @@ class _MyNotesPageState extends ConsumerState<MyNotesPage> {
     setState(() {
       _iosCanUndo = false;
       _iosCanRedo = false;
+      _backgroundZoom = 1;
     });
     unawaited(
       ref.read(myNotesControllerProvider.notifier).openExistingNote(note),
@@ -1159,6 +1172,11 @@ class _NoteEditorView extends StatelessWidget {
     required this.onPanEnd,
     required this.onPanCancel,
     required this.onHistoryChanged,
+    required this.backgroundZoom,
+    required this.onZoomIn,
+    required this.onZoomOut,
+    required this.onResetZoom,
+    required this.onBackgroundZoomChanged,
     required this.onPendingPencilKitConsumed,
     required this.onSave,
   });
@@ -1181,6 +1199,11 @@ class _NoteEditorView extends StatelessWidget {
   final GestureDragEndCallback onPanEnd;
   final VoidCallback onPanCancel;
   final ValueChanged<NoteDrawingHistory> onHistoryChanged;
+  final double backgroundZoom;
+  final VoidCallback onZoomIn;
+  final VoidCallback onZoomOut;
+  final VoidCallback onResetZoom;
+  final ValueChanged<double> onBackgroundZoomChanged;
   final VoidCallback onPendingPencilKitConsumed;
   final Future<void> Function() onSave;
 
@@ -1283,6 +1306,7 @@ class _NoteEditorView extends StatelessWidget {
                     onPanEnd: onPanEnd,
                     onPanCancel: onPanCancel,
                     onHistoryChanged: onHistoryChanged,
+                    onBackgroundZoomChanged: onBackgroundZoomChanged,
                     borderRadius: ui(18),
                   ),
                 ),
@@ -1321,6 +1345,33 @@ class _NoteEditorView extends StatelessWidget {
                               onPressed: canRedo ? () => onRedo() : null,
                               icon: const Icon(Icons.redo_rounded),
                               tooltip: '重做',
+                            ),
+                            Container(
+                              width: 1,
+                              height: ui(22),
+                              color: const Color(0xFFEAEAF2),
+                            ),
+                            SizedBox(width: ui(4)),
+                            IconButton(
+                              onPressed: onZoomOut,
+                              icon: const Icon(Icons.remove_rounded),
+                              tooltip: '缩小画布',
+                            ),
+                            TextButton(
+                              onPressed: onResetZoom,
+                              style: TextButton.styleFrom(
+                                minimumSize: Size(ui(54), ui(40)),
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: ui(4),
+                                ),
+                                foregroundColor: const Color(0xFF1F1A32),
+                              ),
+                              child: Text('${(backgroundZoom * 100).round()}%'),
+                            ),
+                            IconButton(
+                              onPressed: onZoomIn,
+                              icon: const Icon(Icons.add_rounded),
+                              tooltip: '放大画布',
                             ),
                             Container(
                               width: 1,
