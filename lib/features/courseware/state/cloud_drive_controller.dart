@@ -662,7 +662,7 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
     // libmpv 加载失败、URL 解析异常等），任意一处都不应该让整个
     // 课件预览页 / APP 跟着崩。统一 try/catch 兜底：失败时回到
     // 「无播放器」的安静状态，UI 上「播放/进度条」只是无响应。
-    Player? player;
+    late final Player player;
     try {
       player = Player();
     } catch (_) {
@@ -686,7 +686,7 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
     _previewCompletedSub = player.stream.completed.listen((completed) async {
       if (completed && mounted) {
         // 播完后回到开头，停在暂停态。
-        await player!.seek(Duration.zero);
+        await player.seek(Duration.zero);
         await player.pause();
       }
     });
